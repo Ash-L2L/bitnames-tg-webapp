@@ -1,7 +1,7 @@
 #![feature(addr_parse_ascii)]
 
 use tracing_subscriber::fmt::format::FmtSpan;
-use warp::{reject::Rejection, reply::{Reply, self}, trace, Filter};
+use warp::{reject::Rejection, reply::{Reply, self}, trace, Filter, self};
 
 fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
        + Clone
@@ -18,6 +18,8 @@ fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
         <body>
             <h1>Hello, world!</h1>
             <p id="show_storage"></p>
+            <script src="node_modules/aes-js/index.js"></script>
+            <script src="node_modules/pbkdf2/index.js"></script>
             <script>
                 let ctr_str = localStorage.getItem('ctr');
                 if(ctr_str===null){
@@ -26,10 +28,17 @@ fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
                     localStorage.setItem('ctr', ctr.toString());
                 } else {
                     document.getElementById("show_storage").innerHTML = `STORAGE = ${ctr_str}`;
-                    var ctr = parseInt(ctr_str);
+                    let ctr = parseInt(ctr_str);
                     ctr++;
                     localStorage.setItem('ctr', ctr.toString());
                 }
+                window.Telegram.WebApp.ready();
+                window.Telegram.WebApp.showAlert(ctr_str);
+                //FIXME: no validation that this is actually hex
+                let secret_hexstr = window.prompt("Enter your hex secret");
+                let password = window.prompt("Enter a password to encrypt the secret");
+                let secret_hex = aesjs.utils.hex.toBytes(secret_hexstr);
+                //let secret_encrypted = 
             </script>
         </body>
     </html>
@@ -58,11 +67,20 @@ async fn main() {
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
+    let node_modules_route =
+        warp::path("node_modules")
+            .and(warp::fs::dir("node_modules"));
+
+    let routes =
+        hello()
+            .or(node_modules_route)
+            .with(trace::request());
+
     let socket_addr =
-        std::net::SocketAddr::parse_ascii(b"127.0.0.1:8085").unwrap();
-    const CERT_PATH: &str = "/home/ash/Programs/mkcert/127.0.0.1.pem";
-    const KEY_PATH: &str = "/home/ash/Programs/mkcert/127.0.0.1-key.pem";
-    let routes = hello().with(trace::request());
+        std::net::SocketAddr::parse_ascii(b"139.162.66.220:8085").unwrap();
+    const CERT_PATH: &str = "bitnames-tg_xyz.ca-bundle+crt";
+    const KEY_PATH: &str = "bitnames-tg_xyz-key.pem";
+            
     warp::serve(routes)
         .tls()
         .cert_path(CERT_PATH)
