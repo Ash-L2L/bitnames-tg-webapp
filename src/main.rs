@@ -18,7 +18,11 @@ fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
         <body>
             <h1>Hello, world!</h1>
             <p id="show_storage"></p>
-            <script src="web/index.js"></script>
+            <div class = "myDiv">
+                <h2>Heading in a div</h2>
+                <p>Text in a div</p>
+            </div>
+            <script src="dist/bundle.js"></script>
         </body>
     </html>
     "#;
@@ -46,13 +50,12 @@ async fn main() {
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
-    let node_modules_route =
-        warp::path("node_modules")
-            .and(warp::fs::dir("node_modules"));
+    let dist_route =
+        warp::path("dist").and(warp::fs::dir("dist"));
 
     let routes =
         hello()
-            .or(node_modules_route)
+            .or(dist_route)
             .with(trace::request());
 
     let socket_addr =
