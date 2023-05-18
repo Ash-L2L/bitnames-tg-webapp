@@ -19,5 +19,9 @@
   "dependencies": {
     "aes-js": "^3.1.2",
     "pbkdf2": "^3.1.2"
+  },
+  "devDependencies": {
+    "webpack": "^5.83.1",
+    "webpack-cli": "^5.1.1"
   }
 }
