@@ -1,11 +1,14 @@
 const path = require('path')
 
 module.exports = {
-    entry: './web/index.js',
+    entry: {
+        index: './web/index.js',
+        decrypt: './web/decrypt.js',
+    },
     mode: 'development',
     output: {
       path: path.resolve(__dirname, 'dist'),
-      filename: 'bundle.js',
+      filename: '[name].bundle.js',
     },
     resolve: {
         fallback: {

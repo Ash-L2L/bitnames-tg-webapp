@@ -22,12 +22,34 @@ fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
                 <h2>Heading in a div</h2>
                 <p>Text in a div</p>
             </div>
-            <script src="dist/bundle.js"></script>
+            <script src="dist/index.bundle.js"></script>
         </body>
     </html>
     "#;
     warp::path!("hello").map(|| reply::html(HTML))
                 .with(trace::named("hello"))
+}
+
+fn decrypt() -> impl Filter<Extract = impl Reply, Error = Rejection>
+       + Clone
+       + Send
+       + Sync
+       + 'static {
+    
+    static HTML: &str = r#"
+    <html>
+        <head>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <title>Title</title>
+        </head>
+        <body>
+            <h1>Decrypt message</h1>
+            <script src="dist/decrypt.bundle.js"></script>
+        </body>
+    </html>
+    "#;
+    warp::path!("decrypt").map(|| reply::html(HTML))
+                .with(trace::named("decrypt"))
 }
 
 #[tokio::main]
@@ -55,6 +77,7 @@ async fn main() {
 
     let routes =
         hello()
+            .or(decrypt())
             .or(dist_route)
             .with(trace::request());
 
