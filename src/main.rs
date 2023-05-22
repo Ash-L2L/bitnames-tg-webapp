@@ -44,12 +44,14 @@ fn decrypt() -> impl Filter<Extract = impl Reply, Error = Rejection>
         </head>
         <body>
             <h1>Decrypt message</h1>
-            <script src="dist/decrypt.bundle.js"></script>
+            <script src="../dist/decrypt.bundle.js"></script>
         </body>
     </html>
     "#;
-    warp::path!("decrypt").map(|| reply::html(HTML))
-                .with(trace::named("decrypt"))
+    warp::path!("decrypt" / String).map(|_ciphertext_hexstr| {
+        reply::html(HTML)
+    })
+    .with(trace::named("decrypt"))
 }
 
 #[tokio::main]

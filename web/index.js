@@ -1,5 +1,6 @@
 
 const aesjs = require('aes-js');
+const eccrypto = require('@toruslabs/eccrypto');
 const crypto = require('crypto');
 const pbkdf2 = require('pbkdf2');
 
@@ -62,6 +63,7 @@ if(secret_ciphertext_hexstr===null){
         let secret_hexstr = document.getElementById('secret_hex_input').value;
         let password = document.getElementById('password_input').value;
         let secret_hex = aesjs.utils.hex.toBytes(secret_hexstr);
+        let cpubkey_hex = eccrypto.getPublicCompressed(Buffer.from(secret_hex));
         let aes_key = pbkdf2.pbkdf2Sync(password, pbkdf2_salt, 1, 256/8, 'sha512');
         let aes_ctr = new aesjs.ModeOfOperation.ctr(aes_key);
         let secret_ciphertext = aes_ctr.encrypt(secret_hex);
@@ -71,6 +73,8 @@ if(secret_ciphertext_hexstr===null){
             'secret_ciphertext_hexstr',
             secret_ciphertext_hexstr
         );
+        let cpubkey_hexstr = aesjs.utils.hex.fromBytes(cpubkey_hex);
+        localStorage.setItem('cpubkey_hexstr', cpubkey_hexstr);
         location.reload();
     }
 } else {
@@ -78,9 +82,25 @@ if(secret_ciphertext_hexstr===null){
     err_div.setAttribute('id', 'err_div');
     err_text = document.createElement('p');
     err_text.setAttribute('id', 'err_text');
-    err_text.textContent = 'Secret exists in localStorage';
+    let cpubkey_hexstr =
+        localStorage.getItem('cpubkey_hexstr');
+    err_text.textContent =
+        `Secret exists in localStorage with cpubkey ${cpubkey_hexstr}`;
     err_div.appendChild(err_text);
+    err_div.appendChild(document.createElement('br'));
+
+    let button = document.createElement('button');
+    button.textContent = 'Clear storage (UNSAFE)';
+    err_div.appendChild(button);
+    button.addEventListener("click", clear_storage);
+
     document.body.appendChild(err_div);
+
+    function clear_storage() {
+        localStorage.removeItem('secret_ciphertext_hexstr');
+        localStorage.removeItem('cpubkey_hexstr');
+        location.reload();
+    }
 }
 
 /*
