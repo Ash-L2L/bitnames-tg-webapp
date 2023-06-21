@@ -1,0 +1,3 @@
+[submodule "vendor/eccrypto"]
+	path = vendor/eccrypto
+	url = https://github.com/Ash-L2L/eccrypto.git

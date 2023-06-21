@@ -17,6 +17,10 @@ module.exports = {
         }),
     ],
     resolve: {
+        alias: {
+            '@layertwolabs/eccrypto': path.resolve('vendor/eccrypto'),
+        },
+        extensions: ['.ts', '.tsx', '.js'],
         fallback: {
             buffer: require.resolve('buffer/'),
             crypto: require.resolve("crypto-browserify/"),

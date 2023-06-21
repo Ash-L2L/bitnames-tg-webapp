@@ -1,6 +1,6 @@
 const aesjs = require('aes-js');
 const crypto = require('crypto');
-const eccrypto = require('@toruslabs/eccrypto');
+const eccrypto = require('@layertwolabs/eccrypto');
 const path = require('path');
 const pbkdf2 = require('pbkdf2');
 
@@ -8,7 +8,7 @@ let secret_ciphertext_hexstr =
     localStorage.getItem('secret_ciphertext_hexstr');
 let ciphertext_hexstr =
     path.basename(window.location.pathname);
-let ciphertext_hex = aesjs.utils.hex.toBytes(ciphertext_hexstr);
+let ciphertext_hex = new Uint8Array(aesjs.utils.hex.toBytes(ciphertext_hexstr));
 
 /*
 const ciphertext_div = document.createElement('div');
@@ -53,7 +53,7 @@ if(secret_ciphertext_hexstr===null){
     button.addEventListener("click", decrypt_and_show);
     document.body.appendChild(decrypt_div);
 
-    function decrypt_and_show() {
+    async function decrypt_and_show() {
         //FIXME: no validation that this is actually hex
         let password = document.getElementById('password_input').value;
         let secret_ciphertext_hex =
@@ -74,18 +74,24 @@ if(secret_ciphertext_hexstr===null){
         show_secret.textContent = `Secret: ${secret_hexstr}`;
         */
 
-        // compute iv for aes-256-cbc
-        const hasher = crypto.createHash('sha256');
-        hasher.update('bitnames-tg-webapp-ecies-aes-iv');
-        const aes_iv = Buffer.from(hasher.digest().subarray(0, 16));
+        let decrypted_secret_ok = document.getElementById('decrypted_secret_ok');
+        if(decrypted_secret_ok===null){
+            decrypted_secret_ok_par = document.createElement('p');
+            decrypted_secret_ok_par.setAttribute('id', 'decrypted_secret_ok');
+            decrypt_div.appendChild(document.createElement('br'));
+            decrypt_div.appendChild(decrypted_secret_ok_par);
+        }
+        decrypted_secret_ok_par.textContent = "Secret decrypted successfully";
+
         let decrypt_args = {
-            iv: aes_iv,
+            // For some reason, this fails if the IV is taken via subarray
+            iv: Buffer.from(ciphertext_hex.buffer.slice(33, 49)),
             ephemPublicKey: Buffer.from(ciphertext_hex.subarray(0, 33)),
-            ciphertext: Buffer.from(ciphertext_hex.subarray(33, -32)),
+            ciphertext: Buffer.from(ciphertext_hex.subarray(49, -32)),
             mac: Buffer.from(ciphertext_hex.subarray(-32)),
         }
 
-        eccrypto.decrypt(Buffer.from(secret_hex), decrypt_args)
+        await eccrypto.decrypt(Buffer.from(secret_hex), decrypt_args)
             .then(function(plaintext_hex) {
                 let show_plaintext = document.getElementById('show_plaintext');
                 if(show_plaintext===null){

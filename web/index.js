@@ -1,6 +1,6 @@
 
 const aesjs = require('aes-js');
-const eccrypto = require('@toruslabs/eccrypto');
+const eccrypto = require('@layertwolabs/eccrypto');
 const crypto = require('crypto');
 const pbkdf2 = require('pbkdf2');
 
