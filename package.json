@@ -20,6 +20,7 @@
     "@layertwolabs/eccrypto": "^3.0.0",
     "aes-js": "^3.1.2",
     "buffer": "^6.0.3",
+    "canonicalize": "^2.0.0",
     "crypto-browserify": "^3.12.0",
     "path-browserify": "^1.0.1",
     "pbkdf2": "^3.1.2",
