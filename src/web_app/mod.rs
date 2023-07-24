@@ -16,15 +16,11 @@ fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
     <html>
         <head>
             <script src="https://telegram.org/js/telegram-web-app.js"></script>
-            <title>Title</title>
+            <title>BitNames Telegram WebApp</title>
         </head>
         <body>
-            <h1>Hello, world!</h1>
+            <h1>BitNames</h1>
             <p id="show_storage"></p>
-            <div class = "myDiv">
-                <h2>Heading in a div</h2>
-                <p>Text in a div</p>
-            </div>
             <script src="dist/index.bundle.js"></script>
         </body>
     </html>

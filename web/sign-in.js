@@ -6,26 +6,11 @@ const eccrypto = require('@layertwolabs/eccrypto');
 const path = require('path');
 const pbkdf2 = require('pbkdf2');
 
-let secret_ciphertext_hexstr =
-    localStorage.getItem('secret_ciphertext_hexstr');
-let cpubkey_hexstr =
-    localStorage.getItem('cpubkey_hexstr');
-
-let params = new URL(window.document.location).searchParams;
-let request_base64url = params.get("tgWebAppStartParam");
-
-// FIXME: remove
-request_base64url = "eyJiaXRuYW1lX2hhc2giOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiY3BrX2hhc2giOiJhN2NhNTk2NmZjNzJiYTc4MTA4MTQ4MzhkZGFlNGM3MTQ5NjZhZjhlNzc3NGE1OWRlZTg0YzZmMmRkZTAxMjlmIiwic2lnbmVkX2JvZHkiOiIwM2QwNTlhM2Q0MTAxYzViZTM5OTJhNDI4MWJlZDU3YTNlMDMyZTcwMTNiYzFmMjJjMjY4ZTgwOWI2ZDZlOGFmOGQzOTI4ODAxMjAyNWNlYzFlN2NmY2YzYWFjMDRjNjE0Y2MxZWIzMzhjNGQ3NzY3ODhhYmNlYjUyYWY5YjYyYmMyZTEwYzM0MGM2MDczMDUyYzQ1MDY0YTk4YWM5N2M5YTYyZGYzMjc5MzE0NWI0ZTFlOTRkMThhODMyNzdiOGVhNGJmMzgwZjJhNzAxYmZmOWZkOWUyODcwYzcwYmUwMmViYjQ5MzE2YzFjYTAxNjM1MWZhZjE4NmZhZDE2ZGY1MWQ0M2M0ZDE2MTNkMTk0NDJjMGM0M2Y5ZjlhNDNiYmNjMmVmMDMyZDkwZDQxODBmZWVjOWE2Mzg1NzFlODM5ODdmZjU2MjljNDY2NmY3YmNhZjk4NDhhZDAwZWEwMzU1ZWVlOTlhOTQ5ZDYxMTIwYmQzYzcwM2QyNTE2Y2E5YzIxYWYzYzQyNDYwNmRiYzhmNmQ3ZTNkZjEwYTM0M2MyMjQ4ZGM5YmNkYzBhOGU2Yzc0NDBlMjdjY2ViYWY5OWRkYmI3NjliZWExYTE1NjRlNDc2NDVjOTMxOGFlMGUxMzhhOGM0NzcyZmVlNmIwZDQ2ZDI0YTZiNjk4YjIzNmViN2JiYmQzOTRkYTJjNmViOTg3ZGNiMjQwNTJjNGY2MmQ0NzVhNjMzMTg3OTU3ODc4Zjc2MWI0MjQ3MzJjYjAyZTQ3YjUzZDcxYWFjZDkxYmI1N2RiY2I1ZWVlMTFlNmEzZjU0YzUzNmFlZTA1YzM2NjU5MGE0NWFmZGJmNjZmYjA3YzE0ZTBhMjFmMDAzMmM3Mjk1ODkyYWU5ZjliNjhhOTFmYmZkMGE0YjMwNzhlMzkxOGE4MzJkMGQ1YjM5Nzg4ZThhYTEyMWRkYWUxNThkYmUzOWNkM2M3NzIwNjFiZDBjOTk5OWNiZDdkOTQ0MTI1NjIzNDI2NDM3ZTE4YzdiZTEyYzY3YzYxNjA3ZTZkMzc0YTgxZDg2MTZlMTY5NzYxOGRlMDkxZTc2NDZjNmE0ODBlMTJkNzU0MzRhYjVhMTExYWU2YjAwZDNkZDU1ZmExMmVlMDA1MGQ4NTJiNGYyNGY5MTIwZmIzYjkyMGRhYmQ3ZjRmNDlkOGI3OWVhZDBhNzhjIiwidmVyc2lvbiI6MX0";
-
-
-let request_bytes = new Uint8Array(Buffer.from(request_base64url, 'base64url'));
-let request_hexstr =
-    new TextDecoder().decode(request_bytes);
-let request = JSON.parse(request_hexstr);
-
 // compute the user's stored cpk hash
 // returns a uint8array
 function stored_cpubkey_hash() {
+    const cpubkey_hexstr =
+        localStorage.getItem('cpubkey_hexstr');
     console.assert(cpubkey_hexstr !== null, "failed to load cpubkey");
     let cpubkey_bytes =
         new Uint8Array(aesjs.utils.hex.toBytes(cpubkey_hexstr));
@@ -34,7 +19,7 @@ function stored_cpubkey_hash() {
     return new Uint8Array(hasher.digest());
 }
 
-async function decrypt_stored_secret() {
+async function decrypt_stored_secret(secret_ciphertext_hexstr) {
     // compute salt for pbkdf2
     const hasher = crypto.createHash('sha256');
     hasher.update('bitnames-tg-webapp');
@@ -48,7 +33,7 @@ async function decrypt_stored_secret() {
     const aes_ctr = new aesjs.ModeOfOperation.ctr(aes_key);
     const secret_bytes = aes_ctr.decrypt(secret_ciphertext_hex);
 
-    const stored_cpubkey_hexstr = cpubkey_hexstr;
+    const stored_cpubkey_hexstr = localStorage.getItem('cpubkey_hexstr');
     // check that the key was decrypted correctly
     const computed_cpubkey_hexstr =
         aesjs.utils.hex.fromBytes(
@@ -73,6 +58,8 @@ async function decrypt_stored_secret() {
 
 // returns the secret as a uint8array
 async function prompt_decrypt_stored_secret(and_then) {
+    const secret_ciphertext_hexstr =
+        localStorage.getItem('secret_ciphertext_hexstr');
     if(secret_ciphertext_hexstr===null){
         const err_div = document.createElement('div');
         err_div.setAttribute('id', 'err_div');
@@ -102,7 +89,7 @@ async function prompt_decrypt_stored_secret(and_then) {
         document.body.appendChild(decrypt_div);
     
         async function click_decrypt_secret_key() {
-            const secret_bytes = await decrypt_stored_secret();
+            const secret_bytes = await decrypt_stored_secret(secret_ciphertext_hexstr);
             await cleanup();
             return await and_then(secret_bytes);
         }
@@ -338,9 +325,58 @@ async function validate_request(request) {
     await prompt_decrypt_stored_secret(with_secret);
 }
 
+// and_then is an async function where the parameter is the request in
+// base64url form, as a string
+async function prompt_request_b64(and_then) {
+    const request_div = document.createElement('div');
+    request_div.setAttribute('id', 'request_div');
+
+    let request_input = document.createElement('input');
+    request_input.setAttribute('id', 'request_b64_input');
+    request_input.setAttribute('type', 'text');
+    let request_input_label = document.createElement('label');
+    request_input_label.for = 'request_b64_input';
+    request_input_label.textContent = 'Sign-in request';
+    request_div.appendChild(request_input_label);
+    request_div.appendChild(request_input);
+    request_div.appendChild(document.createElement('br'));
+
+    let button = document.createElement('button');
+    button.textContent = 'Enter';
+    request_div.appendChild(button);
+    button.addEventListener("click", click_enter);
+    document.body.appendChild(request_div);
+
+    async function click_enter() {
+        const request_b64 = document.getElementById('request_b64_input').value;
+        await cleanup();
+        return await and_then(request_b64);
+    }
+
+    // clear the prompt div
+    async function cleanup() {
+        const request_div = document.getElementById('request_div');
+        request_div.remove();
+    }
+}
+
+async function sign_in () {
+    return await prompt_request_b64(async (request_base64url) => {
+        let request_bytes = new Uint8Array(Buffer.from(request_base64url, 'base64url'));
+        let request_hexstr =
+            new TextDecoder().decode(request_bytes);
+        let request = JSON.parse(request_hexstr);
+        return await validate_request(request);
+    });
+}
+
+exports.sign_in = sign_in;
+
+/*
 (async () => {
     await validate_request(request);
 })();
+*/
 
 /*
 // FIXME: remove
@@ -363,6 +399,7 @@ async function gen_request() {
         "body": req_body,
         "signature": sig_hexstr,
     };
+    const cpubkey_hexstr = localStorage.getItem('cpubkey_hexstr');
     let user_cpk_buf = new aesjs.utils.hex.toBytes(cpubkey_hexstr);
     const encrypted_signed_req_body_buf =
         await canonical_encrypt(Buffer.from(user_cpk_buf), signed_req_body);

@@ -4,6 +4,8 @@ const eccrypto = require('@layertwolabs/eccrypto');
 const crypto = require('crypto');
 const pbkdf2 = require('pbkdf2');
 
+const sign_in = require('./sign-in');
+
 /*
 let ctr_str = localStorage.getItem('ctr');
 if(ctr_str===null){
@@ -89,10 +91,15 @@ if(secret_ciphertext_hexstr===null){
     err_div.appendChild(err_text);
     err_div.appendChild(document.createElement('br'));
 
-    let button = document.createElement('button');
-    button.textContent = 'Clear storage (UNSAFE)';
-    err_div.appendChild(button);
-    button.addEventListener("click", clear_storage);
+    let clear_storage_button = document.createElement('button');
+    clear_storage_button.textContent = 'Clear storage (UNSAFE)';
+    err_div.appendChild(clear_storage_button);
+    clear_storage_button.addEventListener("click", clear_storage);
+
+    let sign_in_button = document.createElement('button');
+    sign_in_button.textContent = 'Sign in with BitNames';
+    err_div.appendChild(sign_in_button);
+    sign_in_button.addEventListener("click", sign_in.sign_in);
 
     document.body.appendChild(err_div);
 
