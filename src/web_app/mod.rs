@@ -73,8 +73,9 @@ fn sign_in() -> impl Filter<Extract = impl Reply, Error = Rejection>
         </body>
     </html>
     "#;
-    warp::path!("sign-in" / String)
-        .map(|_request_base64str| reply::html(HTML))
+    warp::path!("sign-in")
+        .and(warp::query::<std::collections::HashMap<String, String>>())
+        .map(|_queries| reply::html(HTML))
         .with(trace::named("sign-in"))
 }
 

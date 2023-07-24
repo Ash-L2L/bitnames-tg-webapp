@@ -5,6 +5,7 @@ module.exports = {
     entry: {
         index: './web/index.js',
         decrypt: './web/decrypt.js',
+        'sign-in': './web/sign-in.js',
     },
     mode: 'development',
     output: {

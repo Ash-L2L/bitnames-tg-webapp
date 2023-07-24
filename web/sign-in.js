@@ -1,4 +1,5 @@
 const aesjs = require('aes-js');
+const Buffer = require('buffer/').Buffer;
 const canonicalize = require('canonicalize');
 const crypto = require('crypto');
 const eccrypto = require('@layertwolabs/eccrypto');
@@ -9,8 +10,14 @@ let secret_ciphertext_hexstr =
     localStorage.getItem('secret_ciphertext_hexstr');
 let cpubkey_hexstr =
     localStorage.getItem('cpubkey_hexstr');
-let request_base64url =
-    path.basename(window.location.pathname);
+
+let params = new URL(window.document.location).searchParams;
+let request_base64url = params.get("tgWebAppStartParam");
+
+// FIXME: remove
+request_base64url = "eyJiaXRuYW1lX2hhc2giOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiY3BrX2hhc2giOiJhN2NhNTk2NmZjNzJiYTc4MTA4MTQ4MzhkZGFlNGM3MTQ5NjZhZjhlNzc3NGE1OWRlZTg0YzZmMmRkZTAxMjlmIiwic2lnbmVkX2JvZHkiOiIwM2QwNTlhM2Q0MTAxYzViZTM5OTJhNDI4MWJlZDU3YTNlMDMyZTcwMTNiYzFmMjJjMjY4ZTgwOWI2ZDZlOGFmOGQzOTI4ODAxMjAyNWNlYzFlN2NmY2YzYWFjMDRjNjE0Y2MxZWIzMzhjNGQ3NzY3ODhhYmNlYjUyYWY5YjYyYmMyZTEwYzM0MGM2MDczMDUyYzQ1MDY0YTk4YWM5N2M5YTYyZGYzMjc5MzE0NWI0ZTFlOTRkMThhODMyNzdiOGVhNGJmMzgwZjJhNzAxYmZmOWZkOWUyODcwYzcwYmUwMmViYjQ5MzE2YzFjYTAxNjM1MWZhZjE4NmZhZDE2ZGY1MWQ0M2M0ZDE2MTNkMTk0NDJjMGM0M2Y5ZjlhNDNiYmNjMmVmMDMyZDkwZDQxODBmZWVjOWE2Mzg1NzFlODM5ODdmZjU2MjljNDY2NmY3YmNhZjk4NDhhZDAwZWEwMzU1ZWVlOTlhOTQ5ZDYxMTIwYmQzYzcwM2QyNTE2Y2E5YzIxYWYzYzQyNDYwNmRiYzhmNmQ3ZTNkZjEwYTM0M2MyMjQ4ZGM5YmNkYzBhOGU2Yzc0NDBlMjdjY2ViYWY5OWRkYmI3NjliZWExYTE1NjRlNDc2NDVjOTMxOGFlMGUxMzhhOGM0NzcyZmVlNmIwZDQ2ZDI0YTZiNjk4YjIzNmViN2JiYmQzOTRkYTJjNmViOTg3ZGNiMjQwNTJjNGY2MmQ0NzVhNjMzMTg3OTU3ODc4Zjc2MWI0MjQ3MzJjYjAyZTQ3YjUzZDcxYWFjZDkxYmI1N2RiY2I1ZWVlMTFlNmEzZjU0YzUzNmFlZTA1YzM2NjU5MGE0NWFmZGJmNjZmYjA3YzE0ZTBhMjFmMDAzMmM3Mjk1ODkyYWU5ZjliNjhhOTFmYmZkMGE0YjMwNzhlMzkxOGE4MzJkMGQ1YjM5Nzg4ZThhYTEyMWRkYWUxNThkYmUzOWNkM2M3NzIwNjFiZDBjOTk5OWNiZDdkOTQ0MTI1NjIzNDI2NDM3ZTE4YzdiZTEyYzY3YzYxNjA3ZTZkMzc0YTgxZDg2MTZlMTY5NzYxOGRlMDkxZTc2NDZjNmE0ODBlMTJkNzU0MzRhYjVhMTExYWU2YjAwZDNkZDU1ZmExMmVlMDA1MGQ4NTJiNGYyNGY5MTIwZmIzYjkyMGRhYmQ3ZjRmNDlkOGI3OWVhZDBhNzhjIiwidmVyc2lvbiI6MX0";
+
+
 let request_bytes = new Uint8Array(Buffer.from(request_base64url, 'base64url'));
 let request_hexstr =
     new TextDecoder().decode(request_bytes);
@@ -28,6 +35,11 @@ function stored_cpubkey_hash() {
 }
 
 async function decrypt_stored_secret() {
+    // compute salt for pbkdf2
+    const hasher = crypto.createHash('sha256');
+    hasher.update('bitnames-tg-webapp');
+    const pbkdf2_salt = hasher.digest();
+
     //FIXME: no validation that this is actually hex
     const password = document.getElementById('password_input').value;
     const secret_ciphertext_hex =
@@ -35,6 +47,17 @@ async function decrypt_stored_secret() {
     const aes_key = pbkdf2.pbkdf2Sync(password, pbkdf2_salt, 1, 256/8, 'sha512');
     const aes_ctr = new aesjs.ModeOfOperation.ctr(aes_key);
     const secret_bytes = aes_ctr.decrypt(secret_ciphertext_hex);
+
+    const stored_cpubkey_hexstr = cpubkey_hexstr;
+    // check that the key was decrypted correctly
+    const computed_cpubkey_hexstr =
+        aesjs.utils.hex.fromBytes(
+            eccrypto.getPublicCompressed(Buffer.from(secret_bytes))
+        );
+    console.assert(
+        stored_cpubkey_hexstr === computed_cpubkey_hexstr,
+        "Decrypting secret key failed"
+    );
 
     let decrypted_secret_ok = document.getElementById('decrypted_secret_ok');
     if(decrypted_secret_ok===null){
@@ -48,6 +71,7 @@ async function decrypt_stored_secret() {
     return secret_bytes;
 }
 
+// returns the secret as a uint8array
 async function prompt_decrypt_stored_secret(and_then) {
     if(secret_ciphertext_hexstr===null){
         const err_div = document.createElement('div');
@@ -58,11 +82,6 @@ async function prompt_decrypt_stored_secret(and_then) {
         err_div.appendChild(err_text);
         document.body.appendChild(err_div);
     } else {
-        // compute salt for pbkdf2
-        const hasher = crypto.createHash('sha256');
-        hasher.update('bitnames-tg-webapp');
-        const pbkdf2_salt = hasher.digest();
-    
         const decrypt_div = document.createElement('div');
         decrypt_div.setAttribute('id', 'decrypt_div');
     
@@ -84,11 +103,19 @@ async function prompt_decrypt_stored_secret(and_then) {
     
         async function click_decrypt_secret_key() {
             const secret_bytes = await decrypt_stored_secret();
+            await cleanup();
             return await and_then(secret_bytes);
         }
     }
+
+    // clear the prompt div
+    async function cleanup() {
+        const decrypt_div = document.getElementById('decrypt_div');
+        decrypt_div.remove();
+    }
 }
 
+// uses uint8arrays throughout
 async function decrypt(secret_bytes, ciphertext_bytes) {
     const decrypt_args = {
         // For some reason, this fails if the IV is taken via subarray
@@ -141,9 +168,10 @@ function gen_expiry(req_body) {
     // latest possible time for the expiry
     const limit_expiry = new Date(req_body.session_expiry);
     // current time + duration
-    const max_expiry_from_now = Date.now() + req_body.duration;
-    return Math.min(limit_expiry, max_expiry_from_now);
-
+    const max_expiry_from_now =
+        new Date(Date.now() + req_body.duration);
+    const expiry = Math.min(limit_expiry, max_expiry_from_now);
+    return new Date(expiry);
 }
 
 // compute the hash of a json object
@@ -197,10 +225,11 @@ async function sign_response(
         "session_expiry": session_expiry.getMilliseconds()
     };
     let canonical_resp_body_hash_buf = canonical_hash(resp_body);
-    let canonical_resp_hash_hexstr =
-        aesjs.utils.hex.fromBytes(canonical_resp_hash_buf);
-    let sig_buf =
-        await eccrypto.sign(secret_bytes, canonical_resp_hash_hexstr);
+    let sig_buf = 
+        await eccrypto.sign(
+            Buffer.from(secret_bytes),
+            canonical_resp_body_hash_buf
+        );
     let sig_hexstr =
         aesjs.utils.hex.fromBytes(sig_buf);
     let resp = {
@@ -212,9 +241,56 @@ async function sign_response(
     const canonical_resp_utf8_buf =
         Buffer.from(canonical_resp_str, 'utf8');
     // encrypt
-    const encrypted_resp_buf = await encrypt(server_cpk_buf, session_expiry);
+    const encrypted_resp_buf = await encrypt(server_cpk_buf, canonical_resp_utf8_buf);
     return encrypted_resp_buf;
 }
+
+// prompt to sign response / cancel
+async function prompt_sign(
+    request,
+    server_bitname,
+    server_cpk_buf,
+    session_id,
+    expiry,
+    secret_bytes
+) {
+    // expiry as a string
+    const expiry_str = expiry.toString();
+    
+    let prompt_sign_div = document.createElement('div');
+    prompt_sign_div.setAttribute('id', 'prompt_sign_div');
+    prompt_sign_text = document.createElement('p');
+    prompt_sign_text.setAttribute('id', 'prompt_sign_text');
+    prompt_sign_text.textContent = `Sign in with ${server_bitname}?`;
+    prompt_sign_text.textContent += `\nSession ID: ${session_id}`;
+    prompt_sign_text.textContent += `\nExpiry: ${expiry_str}`;
+    prompt_sign_div.appendChild(prompt_sign_text);
+
+    let button_approve = document.createElement('button');
+    let button_decline = document.createElement('button');
+    button_approve.textContent = 'Approve';
+    button_decline.textContent = 'Decline';
+    prompt_sign_div.appendChild(button_approve);
+    prompt_sign_div.appendChild(button_decline);
+    button_approve.addEventListener("click", click_approve);
+    button_decline.addEventListener("click", cleanup);
+    document.body.appendChild(prompt_sign_div);
+    
+    // clear the prompt div
+    async function cleanup() {
+        const prompt_sign_div = document.getElementById('prompt_sign_div');
+        prompt_sign_div.remove();
+    }
+
+    async function click_approve() {
+        const encrypted_resp_buf =
+        await sign_response(request, server_cpk_buf, expiry, secret_bytes);
+        console.log("Encrypted OK!");
+        console.log(encrypted_resp_buf);
+        return await cleanup();
+    }
+}
+
 
 async function validate_request(request) {
     console.assert(
@@ -233,8 +309,10 @@ async function validate_request(request) {
         );
     // validation steps once the secret is decrypted
     async function with_secret(secret_bytes) {
+        const encrypted_signed_req_body_bytes =
+            new Uint8Array(aesjs.utils.hex.toBytes(request.signed_body));
         const signed_req_body_bytes =
-            await decrypt(secret_bytes, request.signed_body);
+            await decrypt(secret_bytes, encrypted_signed_req_body_bytes);
         let signed_req_body_hexstr =
             new TextDecoder().decode(signed_req_body_bytes);
         let signed_req_body = JSON.parse(signed_req_body_hexstr);
@@ -243,16 +321,28 @@ async function validate_request(request) {
             "Failed to validate signed request body"
         );
         const expiry = gen_expiry(signed_req_body.body);
+        const server_bitname = signed_req_body.body.bitname;
         const server_cpk = signed_req_body.body.cpubkey;
-        // FIXME: display bitname, session ID, expiry
-        const encrypted_resp_buf =
-            await sign_response(request, server_cpk, expiry, secret_bytes);
-        console.log("Encrypted OK!");
-        console.log(encrypted_resp_buf);
+        const server_cpk_buf =
+            Buffer.from(aesjs.utils.hex.toBytes(server_cpk));
+        const session_id = signed_req_body.body.session_id;
+        await prompt_sign(
+            request,
+            server_bitname,
+            server_cpk_buf,
+            session_id,
+            expiry,
+            secret_bytes
+        );
     }
     await prompt_decrypt_stored_secret(with_secret);
 }
 
+(async () => {
+    await validate_request(request);
+})();
+
+/*
 // FIXME: remove
 async function gen_request() {
     const secret_buf = eccrypto.generatePrivate();
@@ -275,20 +365,27 @@ async function gen_request() {
     };
     let user_cpk_buf = new aesjs.utils.hex.toBytes(cpubkey_hexstr);
     const encrypted_signed_req_body_buf =
-        await canonical_encrypt(user_cpk_buf, signed_req_body);
+        await canonical_encrypt(Buffer.from(user_cpk_buf), signed_req_body);
+    const encrypted_signed_req_body_hexstr =
+        aesjs.utils.hex.fromBytes(encrypted_signed_req_body_buf);
     const user_cpk_hash_buf = Buffer.from(stored_cpubkey_hash());
     const user_cpk_hash_hexstr = aesjs.utils.hex.fromBytes(user_cpk_hash_buf);
     const req = {
         "version": 0x01,
         "bitname_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-        "cpk_hash": user_cpk_hexstr,
-        "signed_body": signed_req_body
+        "cpk_hash": user_cpk_hash_hexstr,
+        "signed_body": encrypted_signed_req_body_hexstr
     };
+    return req;
 }
+
 // FIXME: remove
-const req = await gen_request();
-const canonical_req = canonicalize(req);
-const canonical_req_buf = Buffer.from(canonical_req, 'utf-8');
-const canonical_req_base64url = canonical_req_buf.toString('base64url');
-console.log("Request (base64url):");
-console.log(canonical_req_base64url);
+(async () => {
+    const req = await gen_request();
+    const canonical_req = canonicalize(req);
+    const canonical_req_buf = Buffer.from(canonical_req, 'utf-8');
+    const canonical_req_base64url = canonical_req_buf.toString('base64url');
+    console.log("Request (base64url):");
+    console.log(canonical_req_base64url);
+})();
+*/
