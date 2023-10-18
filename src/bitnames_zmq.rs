@@ -28,39 +28,6 @@ struct Context {
     shared: Arc<RwLock<SharedContext>>,
 }
 
-// get the addresses from an output
-fn output_addresses(output: &JsonValue) -> anyhow::Result<Vec<&str>> {
-    let script_pubkey = output["scriptPubKey"]
-        .as_object()
-        .ok_or(anyhow::anyhow!("Missing scriptPubKey"))?;
-    match &script_pubkey["addresses"] {
-        JsonValue::Null => Ok(vec![]),
-        JsonValue::Array(addresses) => addresses
-            .iter()
-            .map(|address| {
-                address
-                    .as_str()
-                    .ok_or(anyhow::anyhow!("Failed to parse address"))
-            })
-            .collect(),
-        _ => Err(anyhow::anyhow!("Failed to parse addresses")),
-    }
-}
-
-pub fn tx_addresses(tx: &JsonValue) -> anyhow::Result<Vec<&str>> {
-    let vout: &Vec<_> = tx["vout"]
-        .as_array()
-        .ok_or(anyhow::anyhow!("Missing vout"))?;
-    let res = vout
-        .iter()
-        .map(output_addresses)
-        .collect::<Result<Vec<Vec<_>>, _>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-    Ok(res)
-}
-
 impl Context {
     pub fn new(
         telegram_bot: Bot,
@@ -91,10 +58,9 @@ impl Context {
         let blockhash_hex = hex::encode(blockhash);
         let json_body = serde_json::json!({
             "jsonrpc": "2.0",
-            "method": "getblock",
+            "method": "get_block",
             "params": {
-                "blockhash": blockhash_hex,
-                "verbosity": 2
+                "block_hash": blockhash_hex,
             },
             "id": self.rpc_nonce
         });
@@ -109,48 +75,55 @@ impl Context {
     }
 
     async fn handle_tx(&self, tx: &JsonValue) -> anyhow::Result<()> {
-        let memo =
-            tx["memo"].as_str().ok_or(anyhow::anyhow!("Missing memo"))?;
-        if memo.is_empty() {
-            return Ok(());
-        };
-        let addresses = tx_addresses(tx)?;
-        // collect into hashmap to ensure uniqueness
+        let outputs = tx["outputs"]
+            .as_array()
+            .ok_or_else(|| anyhow!("Expected outputs to be an array"))?;
         let shared_ctxt = self.shared.read().await;
-        let chat_ids: HashSet<ChatId> = addresses
-            .into_iter()
-            .flat_map(|address| {
-                shared_ctxt
-                    .chat_ids(&address.to_owned())
+        for output in outputs {
+            let memo = output["memo"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Missing memo"))?
+                .to_owned();
+            if !memo.is_empty() {
+                let address = output["address"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing address"))?
+                    .to_owned();
+                let chat_ids: HashSet<ChatId> = shared_ctxt
+                    .chat_ids(&address)
                     .into_iter()
                     .flat_map(|chat_ids| chat_ids.iter())
-            })
-            .copied()
-            .collect();
-        drop(shared_ctxt);
-        let web_app_url: url::Url = url::Url::parse(&format!(
-            "https://bitnames-tg.xyz:8085/decrypt/{memo}"
-        ))?;
-        let web_app_info = teloxide::types::WebAppInfo { url: web_app_url };
-        let inline_kb_button = teloxide::types::InlineKeyboardButton {
-            text: "Decrypt".to_owned(),
-            kind: teloxide::types::InlineKeyboardButtonKind::WebApp(
-                web_app_info,
-            ),
-        };
-        let inline_kb_markup =
-            teloxide::types::InlineKeyboardMarkup::new([[inline_kb_button]]);
-        let reply_markup =
-            Some(teloxide::types::ReplyMarkup::from(inline_kb_markup));
-        // FIXME: make this concurrent
-        for chat_id in chat_ids {
-            let mut req = self.tg_bot.send_message(
-                teloxide::types::Recipient::Id(chat_id),
-                "You may have received paymail!\n
-                    Click/Tap to try to decrypt.",
-            );
-            req.payload_mut().reply_markup = reply_markup.clone();
-            let _resp_message: teloxide::types::Message = req.send().await?;
+                    .copied()
+                    .collect();
+                let web_app_url: url::Url = url::Url::parse(&format!(
+                    "https://bitnames-tg.xyz:8085/decrypt/{memo}"
+                ))?;
+                let web_app_info =
+                    teloxide::types::WebAppInfo { url: web_app_url };
+                let inline_kb_button = teloxide::types::InlineKeyboardButton {
+                    text: "Decrypt".to_owned(),
+                    kind: teloxide::types::InlineKeyboardButtonKind::WebApp(
+                        web_app_info,
+                    ),
+                };
+                let inline_kb_markup =
+                    teloxide::types::InlineKeyboardMarkup::new([[
+                        inline_kb_button,
+                    ]]);
+                let reply_markup =
+                    Some(teloxide::types::ReplyMarkup::from(inline_kb_markup));
+                // FIXME: make this concurrent
+                for chat_id in chat_ids {
+                    let mut req = self.tg_bot.send_message(
+                        teloxide::types::Recipient::Id(chat_id),
+                        "You may have received paymail!\n
+                            Click/Tap to try to decrypt.",
+                    );
+                    req.payload_mut().reply_markup = reply_markup.clone();
+                    let _resp_message: teloxide::types::Message =
+                        req.send().await?;
+                }
+            }
         }
         Ok(())
     }
@@ -180,9 +153,9 @@ impl Context {
             .as_object()
             .ok_or(anyhow::anyhow!("Missing result"))?;
         let txs: &Vec<JsonValue> = {
-            block_info_result["tx"]
+            block_info_result["transactions"]
                 .as_array()
-                .ok_or(anyhow::anyhow!("Missing txs"))?
+                .ok_or(anyhow::anyhow!("Missing transactions"))?
         };
         let () = self.handle_new_txs(txs).await?;
         self.known_blocks.insert(blockhash);
@@ -190,15 +163,14 @@ impl Context {
             .as_u64()
             .ok_or(anyhow::anyhow!("Missing block height"))?;
         // previousblockhash will be absent for the genesis block
-        if block_height != 0 {
+        if block_height != 1 {
             let prev_block_hash: BlockHash = {
-                let hexstr =
-                    &block_info_result["previousblockhash"]
-                        .as_str()
-                        .ok_or(anyhow::anyhow!("Missing previousblockhash"))?;
-                hex::decode(hexstr)?.try_into().map_err(|_| {
-                    anyhow!("Failed to decode previousblockhash")
-                })?
+                let hexstr = &block_info_result["prev_side_hash"]
+                    .as_str()
+                    .ok_or(anyhow::anyhow!("Missing prev_side_hash"))?;
+                hex::decode(hexstr)?
+                    .try_into()
+                    .map_err(|_| anyhow!("Failed to decode prev_side_hash"))?
             };
             if !self.known_blocks.contains(&prev_block_hash) {
                 let () = self.handle_new_block(prev_block_hash).await?;
