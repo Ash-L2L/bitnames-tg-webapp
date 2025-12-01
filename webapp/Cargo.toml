@@ -1,0 +1,24 @@
+[package]
+name = "bitnames-tg-webapp"
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+version.workspace = true
+
+[build-dependencies]
+grass = "0.13.4"
+
+[dependencies]
+anyhow = { workspace = true }
+bitnames-types = { workspace = true }
+ed25519-bip32 = "0.4.1"
+getrandom = { version = "0.2.10", features = ["js"] }
+js-sys = "0.3.83"
+ybc = "0.4.0"
+yew = { version = "0.20", features = ["csr"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3.83", features = ["console", "Window"] }
+
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"

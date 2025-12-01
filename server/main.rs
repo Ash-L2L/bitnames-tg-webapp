@@ -1,7 +1,9 @@
-#![feature(addr_parse_ascii)]
 #![feature(iter_intersperse)]
 
-use std::sync::Arc;
+use std::{
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    sync::Arc,
+};
 
 use tokio::{sync::RwLock, task::JoinSet};
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -12,7 +14,7 @@ mod tg_chatbot;
 mod web_app;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     println!("Hello, world!");
     let _env_pathbuf = dotenv::dotenv().expect("failed to read .env file");
 
@@ -33,10 +35,19 @@ async fn main() {
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
-    let socket_addr =
-        std::net::SocketAddr::parse_ascii(b"139.162.66.220:8085").unwrap();
-    const CERT_PATH: &str = "bitnames-tg_xyz.ca-bundle+crt";
-    const KEY_PATH: &str = "bitnames-tg_xyz-key.pem";
+    const SOCKET_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(
+        Ipv4Addr::new(139, 162, 66, 220),
+        8085,
+    ));
+    const CERT_PATH: &str =
+        "bitnames-tg_xyz/2025-11-27/bitnames-tg_xyz.ca-bundle+crt";
+    const KEY_PATH: &str = "bitnames-tg_xyz/bitnames-tg_xyz-key.pem";
+
+    let data_dir = dirs::data_dir()
+        .ok_or_else(|| {
+            anyhow::anyhow!("failed to resolve base data directory")
+        })?
+        .join("bitnames-tg-server");
 
     let mut tasks = JoinSet::new();
     let ctxt = Arc::new(RwLock::new(context::Context::new()));
@@ -44,13 +55,15 @@ async fn main() {
     let _tg_chatbot_abort =
         tasks.spawn(tg_chatbot::start(tg_bot.clone(), ctxt.clone()));
     let _warp_server_abort =
-        tasks.spawn(web_app::warp_server(socket_addr, CERT_PATH, KEY_PATH));
-    let _zmq_task_abort = tasks.spawn(bitnames_zmq::start(tg_bot, ctxt));
+        tasks.spawn(web_app::warp_server(SOCKET_ADDR, CERT_PATH, KEY_PATH));
+    let _zmq_task_abort = tasks.spawn(async move {
+        bitnames_zmq::start(tg_bot, ctxt, &data_dir).await
+    });
 
     let err_msg = tasks
         .join_next()
         .await
         .expect("empty task set")
         .expect_err("task completed without error message");
-    eprintln!("task failed with error message {err_msg}");
+    anyhow::bail!("task failed with error message {err_msg}")
 }

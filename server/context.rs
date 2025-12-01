@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use bitnames_types::Address;
 use teloxide::types::ChatId;
-
-type Address = String;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -21,7 +20,7 @@ impl Context {
     pub fn register_addr(&mut self, chat_id: ChatId, addr: Address) -> bool {
         let _ = self
             .addr_to_chatids
-            .entry(addr.clone())
+            .entry(addr)
             .or_default()
             .insert(chat_id);
         self.chatid_to_addrs

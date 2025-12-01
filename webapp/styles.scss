@@ -1,0 +1,50 @@
+$purple-dark: #100d23;
+$purple-light: #1e1d45;
+$green-trans: #00ff9da6;
+$green-light: #00ff6a;
+$blue-dull: #2B3E5A;
+$blue: #8b96ff;
+$blue-light: #00c3ff;
+
+html {
+    height: 100dvh;
+    width: 100dvw;
+}
+
+body {
+    background: $purple-dark;
+    color: white;
+    font-family: "Fira Mono", sans-serif;
+    height: 100dvh;
+    width: 100dvw;
+}
+
+button {
+    background-color: $purple-light;
+    color: $blue-light;
+}
+
+button span {
+    white-space:pre;
+}
+
+.container.centered-content {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    text-align: center;
+}
+
+.input {
+    background-color: $purple-dark;
+    border-color: $blue;
+    color: $blue-light;
+}
+
+.input:hover {
+    border-color: $blue-light;
+}
+
+.input::placeholder {
+    color: $blue;
+}

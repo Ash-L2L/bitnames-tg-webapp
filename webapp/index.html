@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+    <meta charset="utf-8"/>
+    <title>BitNames Telegram WebApp</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <script type="module">
+        import init from './bitnames_tg_webapp.js';
+        window.Telegram.WebApp.ready();
+        init();
+    </script>
+</body>
+</html>

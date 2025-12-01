@@ -1,40 +1,31 @@
 use std::net::SocketAddr;
 
 use warp::{
-    self,
+    self, Filter,
     reject::Rejection,
     reply::{self, Reply},
-    trace, Filter,
+    trace,
 };
 
 fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
-       + Clone
-       + Send
-       + Sync
-       + 'static {
-    static HTML: &str = r#"
-    <html>
-        <head>
-            <script src="https://telegram.org/js/telegram-web-app.js"></script>
-            <title>BitNames Telegram WebApp</title>
-        </head>
-        <body>
-            <h1>BitNames</h1>
-            <p id="show_storage"></p>
-            <script src="dist/index.bundle.js"></script>
-        </body>
-    </html>
-    "#;
++ Clone
++ Send
++ Sync
++ 'static {
     warp::path!("hello")
-        .map(|| reply::html(HTML))
+        .map(|| {
+            warp::redirect::temporary(warp::http::Uri::from_static(
+                "/dist/index.html",
+            ))
+        })
         .with(trace::named("hello"))
 }
 
 fn decrypt() -> impl Filter<Extract = impl Reply, Error = Rejection>
-       + Clone
-       + Send
-       + Sync
-       + 'static {
++ Clone
++ Send
++ Sync
++ 'static {
     static HTML: &str = r#"
     <html>
         <head>
@@ -43,7 +34,7 @@ fn decrypt() -> impl Filter<Extract = impl Reply, Error = Rejection>
         </head>
         <body>
             <h1>Decrypt message</h1>
-            <script src="../dist/decrypt.bundle.js"></script>
+            <script src="webapp/dist/decrypt.bundle.js"></script>
         </body>
     </html>
     "#;
@@ -53,10 +44,10 @@ fn decrypt() -> impl Filter<Extract = impl Reply, Error = Rejection>
 }
 
 fn sign_in() -> impl Filter<Extract = impl Reply, Error = Rejection>
-       + Clone
-       + Send
-       + Sync
-       + 'static {
++ Clone
++ Send
++ Sync
++ 'static {
     static HTML: &str = r#"
     <html>
         <head>
@@ -65,7 +56,7 @@ fn sign_in() -> impl Filter<Extract = impl Reply, Error = Rejection>
         </head>
         <body>
             <h1>Sign In With BitNames</h1>
-            <script src="../dist/sign-in.bundle.js"></script>
+            <script src="webapp/dist/sign-in.bundle.js"></script>
         </body>
     </html>
     "#;
@@ -79,7 +70,7 @@ pub async fn warp_server(
     socket_addr: SocketAddr,
     cert_path: &str,
     key_path: &str,
-) {
+) -> anyhow::Result<()> {
     let dist_route = warp::path("dist").and(warp::fs::dir("dist"));
     let routes = hello()
         .or(decrypt())
@@ -91,5 +82,6 @@ pub async fn warp_server(
         .cert_path(cert_path)
         .key_path(key_path)
         .run(socket_addr)
-        .await
+        .await;
+    Ok(())
 }
