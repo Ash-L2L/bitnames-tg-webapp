@@ -1,6 +1,9 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
+use bitnames_tg_rpc_api::RpcClient;
 use bitnames_types::XVerifyingKey;
+use futures::TryFutureExt as _;
+use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
 use web_sys::console;
 use ybc::{Button, Container, Input, InputType};
 use yew::{
@@ -110,6 +113,12 @@ fn main_page(props: &MainState) -> Html {
     }
 }
 
+async fn rpc_client() -> anyhow::Result<WasmClient> {
+    let res = bitnames_tg_rpc_api::build_wasm_client(WasmClientBuilder::new())
+        .await?;
+    Ok(res)
+}
+
 enum AppState {
     ImportXPubKey(ImportXPubKeyState),
     Main(MainState),
@@ -144,13 +153,29 @@ fn app() -> Html {
         };
     let telegram_webapp_initdata =
         match js_sys::Reflect::get(&telegram_webapp, &("initData".into())) {
-            Ok(init_data) => init_data,
+            Ok(init_data) => match init_data.as_string() {
+                Some(init_data) => init_data,
+                None => {
+                    log_console_error(anyhow::anyhow!(
+                        "expected initData to be a string"
+                    ));
+                    return Html::default();
+                }
+            },
             Err(err) => {
                 console::log_1(&err);
                 return Html::default();
             }
         };
-    console::log_1(&telegram_webapp_initdata);
+
+    let check_for_used_addrs = yew_hooks::use_async(async {
+        let rpc_client = rpc_client().await.map_err(Arc::new)?;
+        rpc_client
+            .check_for_used_addresses(telegram_webapp_initdata, Vec::new())
+            .map_err(|err| Arc::new(anyhow::Error::from(err)))
+            .await
+    });
+    check_for_used_addrs.run();
     let storage = match window.local_storage() {
         Ok(Some(storage)) => storage,
         Ok(None) => {

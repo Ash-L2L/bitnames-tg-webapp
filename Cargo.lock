@@ -449,17 +449,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitnames-tg-rpc-api"
+version = "0.1.0"
+dependencies = [
+ "jsonrpsee",
+ "plain_bitnames_types",
+]
+
+[[package]]
 name = "bitnames-tg-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async_zmq",
+ "bitnames-tg-rpc-api",
  "dirs",
  "dotenv",
  "futures",
  "heed",
  "hex 0.4.3",
- "jsonrpsee-http-client",
+ "jsonrpsee",
  "plain_bitnames_app_rpc_api",
  "plain_bitnames_types",
  "reqwest",
@@ -478,15 +487,19 @@ name = "bitnames-tg-webapp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bitnames-tg-rpc-api",
  "ed25519-bip32",
+ "futures",
  "getrandom 0.2.16",
  "grass",
  "js-sys",
+ "jsonrpsee",
  "plain_bitnames_types",
  "wasm-bindgen",
  "web-sys",
  "ybc",
  "yew",
+ "yew-hooks",
 ]
 
 [[package]]
@@ -5826,6 +5839,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b06f7c5ed97fff22816bb00d3d82ebc0fc1119d7bbb9e07e62c0d2853f51920a"
 dependencies = [
  "gloo-worker 0.1.2",
+ "yew",
+]
+
+[[package]]
+name = "yew-hooks"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "268e2367720311f19582235f5c021702d6be8ded13b7ee8dcacc71019d055d15"
+dependencies = [
+ "gloo",
+ "js-sys",
+ "log",
+ "serde",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "yew",
 ]
 

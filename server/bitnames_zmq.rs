@@ -5,7 +5,7 @@ use bitnames_rpc_api::RpcClient as _;
 use bitnames_types::{Address, BlockHash, Transaction};
 use futures::TryStreamExt;
 use heed::types::{SerdeBincode, Unit};
-use jsonrpsee_http_client::HttpClient;
+use jsonrpsee::http_client::HttpClient;
 use sneed::{DatabaseUnique, Env};
 use teloxide::{
     Bot,

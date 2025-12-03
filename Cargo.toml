@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["server", "webapp"]
+members = ["rpc-api", "server", "webapp"]
+default-members = ["rpc-api", "server"]
 
 [workspace.package]
 authors = [
@@ -12,6 +13,8 @@ version = "0.1.0"
 
 [workspace.dependencies]
 anyhow = "1.0.71"
+futures = { version = "0.3.31", default-features = false }
+jsonrpsee = "0.24.9"
 
 [workspace.dependencies.bitnames-types]
 git = "https://github.com/LayerTwo-Labs/plain-bitnames.git"

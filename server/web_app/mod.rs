@@ -7,6 +7,8 @@ use warp::{
     trace,
 };
 
+mod rpc_server;
+
 fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
 + Clone
 + Send
@@ -64,6 +66,21 @@ fn sign_in() -> impl Filter<Extract = impl Reply, Error = Rejection>
         .and(warp::query::<std::collections::HashMap<String, String>>())
         .map(|_queries| reply::html(HTML))
         .with(trace::named("sign-in"))
+}
+
+pub async fn json_rpc_server(
+    socket_addr: SocketAddr,
+    // FIXME: use TLS
+    _cert_path: &str,
+    // FIXME: use TLS
+    _key_path: &str,
+) -> anyhow::Result<jsonrpsee::server::ServerHandle> {
+    use bitnames_tg_rpc_api::RpcServer;
+    let server = jsonrpsee::server::Server::builder()
+        .build(socket_addr)
+        .await?;
+    let server_handle = server.start(rpc_server::RpcServerImpl.into_rpc());
+    Ok(server_handle)
 }
 
 pub async fn warp_server(

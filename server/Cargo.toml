@@ -11,17 +11,18 @@ version.workspace = true
 anyhow = { workspace = true }
 async_zmq = "0.3.3"
 bitnames-rpc-api = { workspace = true }
+bitnames-tg-rpc-api = { path = "../rpc-api" }
 bitnames-types = { workspace = true }
 dirs = "6.0.0"
 dotenv = "0.15.0"
-futures = "0.3.31"
-jsonrpsee-http-client = "0.24.9"
+futures = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client"] }
 heed = "0.21.0"
 hex = "0.4.3"
 reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls"] }
 serde_json = "1.0.96"
 sneed = { version = "0.0.11", features = ["observe"] }
-tokio = {version = "1.28.1", features = ["full"]}
+tokio = { version = "1.28.1", features = ["full"] }
 tracing = "0.1.37"
 tracing-subscriber = {version = "0.3.17", features = ["env-filter"]}
 url = "2.3.1"
