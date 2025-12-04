@@ -1,12 +1,10 @@
-use std::{collections::HashSet, convert::TryInto, path::Path, sync::Arc};
+use std::{collections::HashSet, convert::TryInto, sync::Arc};
 
 use async_zmq::Message as ZmqMessage;
 use bitnames_rpc_api::RpcClient as _;
-use bitnames_types::{Address, BlockHash, Transaction};
+use bitnames_types::{BlockHash, Transaction};
 use futures::TryStreamExt;
-use heed::types::{SerdeBincode, Unit};
 use jsonrpsee::http_client::HttpClient;
-use sneed::{DatabaseUnique, Env};
 use teloxide::{
     Bot,
     prelude::{Request, Requester},
@@ -15,7 +13,7 @@ use teloxide::{
 };
 use tokio::sync::RwLock;
 
-use crate::context::Context as SharedContext;
+use crate::{context::Context as SharedContext, dbs::Dbs};
 
 #[derive(Debug)]
 struct Context {
@@ -146,39 +144,19 @@ impl Context {
     }
 }
 
-struct Dbs {
-    env: Env,
-    known_addrs: DatabaseUnique<SerdeBincode<Address>, Unit>,
-}
-
-impl Dbs {
-    pub const NUM_DBS: u32 = 1;
-
-    fn new(path: &Path) -> anyhow::Result<Self> {
-        std::fs::create_dir_all(path)?;
-        let env = {
-            let mut env_open_options = heed::EnvOpenOptions::new();
-            env_open_options
-                .map_size(10 * 1024 * 1024) // 10MB
-                .max_dbs(Self::NUM_DBS);
-            unsafe { Env::open(&env_open_options, path) }?
-        };
-        let mut rwtxn = env.write_txn()?;
-        let known_addrs =
-            DatabaseUnique::create(&env, &mut rwtxn, "known_addrs")?;
-        rwtxn.commit()?;
-        Ok(Self { env, known_addrs })
-    }
-}
-
 async fn sync_addrs(
     bitnames_rpc_client: &HttpClient,
     dbs: &Dbs,
 ) -> anyhow::Result<()> {
     let utxos = bitnames_rpc_client.list_utxos().await?;
+    let stxos = bitnames_rpc_client.list_stxos().await?;
     let mut rwtxn = dbs.env.write_txn()?;
     for utxo in utxos {
         let addr = utxo.output.address;
+        dbs.known_addrs.put(&mut rwtxn, &addr, &())?;
+    }
+    for stxo in stxos {
+        let addr = stxo.output.output.address;
         dbs.known_addrs.put(&mut rwtxn, &addr, &())?;
     }
     rwtxn.commit()?;
@@ -188,11 +166,10 @@ async fn sync_addrs(
 pub async fn start(
     bot: teloxide::Bot,
     shared_context: Arc<RwLock<SharedContext>>,
-    data_dir: &Path,
+    dbs: Dbs,
 ) -> anyhow::Result<()> {
     let rpc_url = dotenv::var("BITNAMES_RPC_URL")?;
     let zmq_endpoint = dotenv::var("BITNAMES_ZMQ_ENDPOINT")?;
-    let dbs = Dbs::new(data_dir)?;
     let bitnames_rpc_client = HttpClient::builder().build(&rpc_url)?;
     let () = sync_addrs(&bitnames_rpc_client, &dbs).await?;
     let mut bitnames_client =

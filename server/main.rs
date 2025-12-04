@@ -5,12 +5,12 @@ use std::{
     sync::Arc,
 };
 
-use futures::FutureExt;
 use tokio::{sync::RwLock, task::JoinSet};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 mod bitnames_zmq;
 mod context;
+mod dbs;
 mod tg_chatbot;
 mod web_app;
 
@@ -39,8 +39,6 @@ async fn main() -> anyhow::Result<()> {
     const IPV4_ADDR: Ipv4Addr = Ipv4Addr::new(139, 162, 66, 220);
     const WARP_SERVER_SOCKET_ADDR: SocketAddr =
         SocketAddr::V4(SocketAddrV4::new(IPV4_ADDR, 8085));
-    const JSON_RPC_SERVER_SOCKET_ADDR: SocketAddr =
-        SocketAddr::V4(SocketAddrV4::new(IPV4_ADDR, 8086));
     const CERT_PATH: &str =
         "bitnames-tg_xyz/2025-11-27/bitnames-tg_xyz.ca-bundle+crt";
     const KEY_PATH: &str = "bitnames-tg_xyz/bitnames-tg_xyz-key.pem";
@@ -50,32 +48,20 @@ async fn main() -> anyhow::Result<()> {
             anyhow::anyhow!("failed to resolve base data directory")
         })?
         .join("bitnames-tg-server");
-
+    let dbs = dbs::Dbs::new(&data_dir)?;
     let mut tasks = JoinSet::new();
     let ctxt = Arc::new(RwLock::new(context::Context::new()));
     let tg_bot = teloxide::Bot::from_env();
     let _tg_chatbot_abort =
         tasks.spawn(tg_chatbot::start(tg_bot.clone(), ctxt.clone()));
-    let _json_rpc_server_monitor_abort =
-        {
-            let server_handle = web_app::json_rpc_server(
-                JSON_RPC_SERVER_SOCKET_ADDR,
-                CERT_PATH,
-                KEY_PATH,
-            )
-            .await?;
-            tasks.spawn(server_handle.stopped().map(|()| {
-                anyhow::bail!("JSON-RPC server stopped unexpectedly")
-            }))
-        };
     let _warp_server_abort = tasks.spawn(web_app::warp_server(
         WARP_SERVER_SOCKET_ADDR,
         CERT_PATH,
         KEY_PATH,
+        dbs.clone(),
     ));
-    let _zmq_task_abort = tasks.spawn(async move {
-        bitnames_zmq::start(tg_bot, ctxt, &data_dir).await
-    });
+    let _zmq_task_abort = tasks
+        .spawn(async move { bitnames_zmq::start(tg_bot, ctxt, dbs).await });
 
     let err_msg = tasks
         .join_next()

@@ -7,6 +7,8 @@ use warp::{
     trace,
 };
 
+use crate::dbs::Dbs;
+
 mod rpc_server;
 
 fn hello() -> impl Filter<Extract = impl Reply, Error = Rejection>
@@ -68,30 +70,75 @@ fn sign_in() -> impl Filter<Extract = impl Reply, Error = Rejection>
         .with(trace::named("sign-in"))
 }
 
-pub async fn json_rpc_server(
-    socket_addr: SocketAddr,
-    // FIXME: use TLS
-    _cert_path: &str,
-    // FIXME: use TLS
-    _key_path: &str,
-) -> anyhow::Result<jsonrpsee::server::ServerHandle> {
-    use bitnames_tg_rpc_api::RpcServer;
-    let server = jsonrpsee::server::Server::builder()
-        .build(socket_addr)
-        .await?;
-    let server_handle = server.start(rpc_server::RpcServerImpl.into_rpc());
-    Ok(server_handle)
-}
-
 pub async fn warp_server(
     socket_addr: SocketAddr,
     cert_path: &str,
     key_path: &str,
+    dbs: Dbs,
 ) -> anyhow::Result<()> {
+    let json_rpc_server = rpc_server::RpcServerImpl::new(dbs);
     let dist_route = warp::path("dist").and(warp::fs::dir("dist"));
+    let jsonrpc_ws_route = warp::path("jsonrpc")
+        .and(warp::filters::ws::ws())
+        .map(move |ws: warp::filters::ws::Ws| {
+            let json_rpc_server = json_rpc_server.clone();
+            ws.on_upgrade(move |mut ws| {
+                use bitnames_tg_rpc_api::RpcServer;
+                let json_rpc_module = json_rpc_server.clone().into_rpc();
+                async move {
+                    tracing::error!("Handling JSON-RPC WS POST...");
+                    use futures::{SinkExt, StreamExt};
+                    let Some(ws_request) = ws.next().await else {
+                        return;
+                    };
+                    let ws_request = match ws_request {
+                        Ok(ws_request) => ws_request,
+                        Err(err) => {
+                            let err = anyhow::Error::from(err);
+                            tracing::error!("{err:#}");
+                            return;
+                        }
+                    };
+                    let Ok(ws_request_str) = ws_request.to_str() else {
+                        tracing::error!("expected a string ws request");
+                        return;
+                    };
+                    match json_rpc_module
+                        .raw_json_request(ws_request_str, 1)
+                        .await
+                    {
+                        Ok((resp, _)) => {
+                            tracing::error!("OK WS RESP");
+                            let resp_msg =
+                                warp::filters::ws::Message::text(resp.get());
+                            if let Err(err) = ws.send(resp_msg).await {
+                                let err = anyhow::Error::from(err);
+                                tracing::error!(
+                                    "Failed to send ws response: {err:#}"
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            let err = anyhow::Error::from(err);
+                            tracing::error!(
+                                "Failed to handle ws request: {err:#}"
+                            );
+                        }
+                    };
+                    if let Err(err) = ws.close().await {
+                        let err = anyhow::Error::from(err);
+                        tracing::error!(
+                            "Failed to close ws connection: {err:#}"
+                        );
+                    }
+                }
+            })
+        })
+        .with(trace::named("jsonrpc-ws-route"));
     let routes = hello()
-        .or(decrypt())
-        .or(sign_in())
+        .or(jsonrpc_ws_route)
+        //.or(decrypt())
+        //.or(sign_in())
         .or(dist_route)
         .with(trace::request());
     warp::serve(routes)

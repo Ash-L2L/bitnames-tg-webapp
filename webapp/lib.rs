@@ -1,21 +1,25 @@
 use std::{str::FromStr, sync::Arc};
 
 use bitnames_tg_rpc_api::RpcClient;
-use bitnames_types::XVerifyingKey;
+use bitnames_types::keys::{Base58EncodingExt, XPubKey};
 use futures::TryFutureExt as _;
-use jsonrpsee::wasm_client::{Client as WasmClient, WasmClientBuilder};
+use jsonrpsee::wasm_client::WasmClientBuilder;
 use web_sys::console;
-use ybc::{Button, Container, Input, InputType};
+use ybc::{Button, Container, Input, InputType, TextArea, Title};
 use yew::{
     Callback, Classes, Html, Properties, classes, function_component, html,
     use_state,
 };
 
+fn jsvalue_of_anyhow(err: &anyhow::Error) -> wasm_bindgen::JsValue {
+    format!("{err:#}").into()
+}
+
 fn jsvalue_of_error<E>(err: E) -> wasm_bindgen::JsValue
 where
     anyhow::Error: From<E>,
 {
-    format!("{:#}", anyhow::Error::from(err)).into()
+    jsvalue_of_anyhow(&(err.into()))
 }
 
 fn log_console_error<E>(err: E)
@@ -35,7 +39,7 @@ struct ImportXPubKeyState {
 #[derive(Properties, PartialEq)]
 struct ImportXPubKeyProps {
     pub state: ImportXPubKeyState,
-    pub on_transition: Callback<XVerifyingKey>,
+    pub on_transition: Callback<XPubKey>,
 }
 
 #[function_component(ImportXPubKey)]
@@ -52,7 +56,7 @@ fn import_xpubkey(props: &ImportXPubKeyProps) -> Html {
         let input_value = input_value.clone();
         let input_classes = input_classes.clone();
         let on_transition = props.on_transition.clone();
-        Callback::from(move |_| match XVerifyingKey::from_str(&input_value) {
+        Callback::from(move |_| match XPubKey::from_str(&input_value) {
             Ok(xvk) => on_transition.emit(xvk),
             Err(err) => {
                 log_console_error(err);
@@ -64,6 +68,12 @@ fn import_xpubkey(props: &ImportXPubKeyProps) -> Html {
     html! {
         <>
         <Container classes={ classes!("centered-content") }>
+            <Title
+                classes={ Classes::default() }
+                is_spaced={true}
+            >
+            { "Import master XPubKey" }
+            </Title>
             <Input
                 name="master-xpubkey-input"
                 classes={ (*input_classes).clone() }
@@ -84,86 +94,11 @@ const XPUB_STORAGE_KEY: &str = "xpub";
 
 #[derive(Debug, PartialEq, Properties)]
 struct MainState {
-    xpub: XVerifyingKey,
+    xpub: XPubKey,
 }
 
 #[function_component(MainPage)]
 fn main_page(props: &MainState) -> Html {
-    let xpub = props.xpub;
-
-    const BATCH_SIZE: u32 = 128;
-    let mut address_batch = Vec::with_capacity(BATCH_SIZE as usize);
-    for idx in 0..BATCH_SIZE {
-        let child_xpub =
-            match xpub.0.derive(ed25519_bip32::DerivationScheme::V2, idx) {
-                Ok(child_xpub) => child_xpub,
-                Err(err) => {
-                    log_console_error(err);
-                    break;
-                }
-            };
-        let verifying_key = match bitnames_types::VerifyingKey::try_from(
-            child_xpub.public_key_bytes(),
-        ) {
-            Ok(vk) => vk,
-            Err(err) => {
-                log_console_error(err);
-                break;
-            }
-        };
-        address_batch
-            .push(bitnames_types::authorization::get_address(&verifying_key));
-    }
-    html! {
-        <></>
-    }
-}
-
-async fn rpc_client() -> anyhow::Result<WasmClient> {
-    let res = bitnames_tg_rpc_api::build_wasm_client(WasmClientBuilder::new())
-        .await?;
-    Ok(res)
-}
-
-enum AppState {
-    ImportXPubKey(ImportXPubKeyState),
-    Main(MainState),
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::ImportXPubKey(ImportXPubKeyState::default())
-    }
-}
-
-fn request(
-    window: &web_sys::Window,
-    init_data: &wasm_bindgen::JsValue,
-) -> Result<wasm_bindgen_futures::JsFuture, wasm_bindgen::JsValue> {
-    let mut opts = web_sys::RequestInit::new();
-    opts.method("POST");
-    let init_data_json: serde_json::Value =
-        serde_wasm_bindgen::from_value(init_data.clone())?;
-    let json_body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "check_for_used_addresses",
-        "params": {
-            "initData": init_data_json,
-            "addresses": Vec::<bitnames_types::Address>::new(),
-        },
-        "id": 0
-    });
-    let body = serde_wasm_bindgen::to_value(&json_body)?;
-    opts.set_body(&body);
-    let request = web_sys::Request::new_with_str_and_init(
-        "http://139.162.66.20:8086",
-        &opts,
-    )?;
-    Ok(window.fetch_with_request(&request).into())
-}
-
-#[function_component(App)]
-fn app() -> Html {
     let Some(window) = web_sys::window() else {
         log_console_error(anyhow::anyhow!("Failed to get window"));
         return Html::default();
@@ -199,26 +134,121 @@ fn app() -> Html {
                 return Html::default();
             }
         };
-    let req_future = match request(&window, &(telegram_webapp_initdata.into()))
-    {
-        Ok(req_future) => req_future,
-        Err(err) => {
-            console::log_1(&err);
-            return Html::default();
-        }
-    };
-    let req_state = yew_hooks::use_async(req_future);
-    req_state.run();
-    /*
-    let check_for_used_addrs = yew_hooks::use_async(async {
-        let rpc_client = rpc_client().await.map_err(Arc::new)?;
-        rpc_client
-            .check_for_used_addresses(telegram_webapp_initdata, Vec::new())
-            .map_err(|err| Arc::new(anyhow::Error::from(err)))
+    let xpub = props.xpub;
+
+    const BATCH_SIZE: u32 = 128;
+    let mut address_batch = Vec::with_capacity(BATCH_SIZE as usize);
+    for idx in 0..BATCH_SIZE {
+        let child_xpub =
+            match xpub.0.derive(ed25519_bip32::DerivationScheme::V2, idx) {
+                Ok(child_xpub) => child_xpub,
+                Err(err) => {
+                    log_console_error(err);
+                    break;
+                }
+            };
+        let verifying_key = match bitnames_types::VerifyingKey::try_from(
+            child_xpub.public_key_bytes(),
+        ) {
+            Ok(vk) => vk,
+            Err(err) => {
+                log_console_error(err);
+                break;
+            }
+        };
+        address_batch
+            .push(bitnames_types::authorization::get_address(&verifying_key));
+    }
+    let check_for_used_addrs = yew_hooks::use_async_with_options(
+        async {
+            let rpc_client = bitnames_tg_rpc_api::build_wasm_client(
+                WasmClientBuilder::new(),
+            )
             .await
-    });
-    check_for_used_addrs.run();
-    */
+            .map_err(|err| Arc::new(anyhow::Error::from(err)))?;
+            rpc_client
+                .check_for_used_addresses(telegram_webapp_initdata, Vec::new())
+                .map_err(|err| Arc::new(anyhow::Error::from(err)))
+                .await
+        },
+        yew_hooks::UseAsyncOptions::enable_auto(),
+    );
+    if check_for_used_addrs.loading {
+        html! {
+            <>
+            <Container classes={ classes!("centered-content") }>
+                <Title
+                    classes={ Classes::default() }
+                    is_spaced={true}
+                >
+                { format!("Checking addrs (0..{})", BATCH_SIZE - 1)  }
+                </Title>
+            </Container>
+            </>
+        }
+    } else if let Some(used_addrs) = &check_for_used_addrs.data {
+        html! {
+            <>
+            <Container classes={ classes!("centered-content") }>
+                <Title
+                    classes={ Classes::default() }
+                    is_spaced={true}
+                 >
+                { "Found used addrs:" }
+                </Title>
+                <TextArea
+                    name={ "used_addresses".to_owned() }
+                    value={
+                        use std::fmt::Write;
+                        let mut s = String::new();
+                        let n_used_addrs = used_addrs.len();
+                        for (idx, addr) in used_addrs.iter().enumerate() {
+                            if idx < n_used_addrs - 1 {
+                                writeln!(&mut s, "{addr}").unwrap()
+                            } else {
+                                write!(&mut s, "{addr}").unwrap()
+                            }
+                        }
+                        s
+                    }
+                    update={ Callback::default() }
+                    classes={ Classes::default() }
+                    placeholder={ String::new() }
+                    rows={ used_addrs.len() as u32 }
+                    fixed_size={ false }
+                    loading={ false }
+                    disabled={ false }
+                    readonly={ true }
+                    r#static={ true }
+                />
+            </Container>
+            </>
+        }
+    } else {
+        if let Some(err) = &check_for_used_addrs.error {
+            console::log_1(&jsvalue_of_anyhow(err));
+        }
+        Html::default()
+    }
+}
+
+enum AppState {
+    ImportXPubKey(ImportXPubKeyState),
+    Main(MainState),
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::ImportXPubKey(ImportXPubKeyState::default())
+    }
+}
+
+#[function_component(App)]
+fn app() -> Html {
+    let Some(window) = web_sys::window() else {
+        log_console_error(anyhow::anyhow!("Failed to get window"));
+        return Html::default();
+    };
     let storage = match window.local_storage() {
         Ok(Some(storage)) => storage,
         Ok(None) => {
@@ -231,15 +261,13 @@ fn app() -> Html {
         }
     };
     let xpub = match storage.get(XPUB_STORAGE_KEY) {
-        Ok(Some(xvk_encoded)) => {
-            match XVerifyingKey::base58ck_decode(&xvk_encoded) {
-                Ok(xvk) => Some(xvk),
-                Err(err) => {
-                    log_console_error(err);
-                    return Html::default();
-                }
+        Ok(Some(xpub_encoded)) => match XPubKey::base58ck_decode(&xpub_encoded) {
+            Ok(xpub) => Some(xpub),
+            Err(err) => {
+                log_console_error(err);
+                return Html::default();
             }
-        }
+        },
         Ok(None) => None,
         Err(err) => {
             console::log_1(&err);
@@ -256,7 +284,7 @@ fn app() -> Html {
         AppState::ImportXPubKey(import_xpubkey_state) => {
             let state = state.clone();
             html! {
-                <ImportXPubKey state={import_xpubkey_state.clone()} on_transition={move |xpub: XVerifyingKey| {
+                <ImportXPubKey state={import_xpubkey_state.clone()} on_transition={move |xpub: XPubKey| {
                     match storage.set_item(XPUB_STORAGE_KEY, &xpub.base58ck_encode()) {
                         Ok(()) => (),
                         Err(err) => {
