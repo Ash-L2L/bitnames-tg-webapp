@@ -11,12 +11,18 @@ use yew::{
     use_state,
 };
 
+fn jsvalue_of_error<E>(err: E) -> wasm_bindgen::JsValue
+where
+    anyhow::Error: From<E>,
+{
+    format!("{:#}", anyhow::Error::from(err)).into()
+}
+
 fn log_console_error<E>(err: E)
 where
     anyhow::Error: From<E>,
 {
-    let err_msg = format!("{:#}", anyhow::Error::from(err));
-    console::error_1(&err_msg.into());
+    console::error_1(&jsvalue_of_error(err));
 }
 
 #[derive(Clone, Default, PartialEq)]
@@ -130,6 +136,32 @@ impl Default for AppState {
     }
 }
 
+fn request(
+    window: &web_sys::Window,
+    init_data: &wasm_bindgen::JsValue,
+) -> Result<wasm_bindgen_futures::JsFuture, wasm_bindgen::JsValue> {
+    let mut opts = web_sys::RequestInit::new();
+    opts.method("POST");
+    let init_data_json: serde_json::Value =
+        serde_wasm_bindgen::from_value(init_data.clone())?;
+    let json_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "check_for_used_addresses",
+        "params": {
+            "initData": init_data_json,
+            "addresses": Vec::<bitnames_types::Address>::new(),
+        },
+        "id": 0
+    });
+    let body = serde_wasm_bindgen::to_value(&json_body)?;
+    opts.set_body(&body);
+    let request = web_sys::Request::new_with_str_and_init(
+        "http://139.162.66.20:8086",
+        &opts,
+    )?;
+    Ok(window.fetch_with_request(&request).into())
+}
+
 #[function_component(App)]
 fn app() -> Html {
     let Some(window) = web_sys::window() else {
@@ -167,7 +199,17 @@ fn app() -> Html {
                 return Html::default();
             }
         };
-
+    let req_future = match request(&window, &(telegram_webapp_initdata.into()))
+    {
+        Ok(req_future) => req_future,
+        Err(err) => {
+            console::log_1(&err);
+            return Html::default();
+        }
+    };
+    let req_state = yew_hooks::use_async(req_future);
+    req_state.run();
+    /*
     let check_for_used_addrs = yew_hooks::use_async(async {
         let rpc_client = rpc_client().await.map_err(Arc::new)?;
         rpc_client
@@ -176,6 +218,7 @@ fn app() -> Html {
             .await
     });
     check_for_used_addrs.run();
+    */
     let storage = match window.local_storage() {
         Ok(Some(storage)) => storage,
         Ok(None) => {

@@ -15,6 +15,6 @@ pub trait Rpc {
 pub async fn build_wasm_client(
     builder: jsonrpsee::wasm_client::WasmClientBuilder,
 ) -> Result<jsonrpsee::wasm_client::Client, jsonrpsee::core::ClientError> {
-    const RPC_API_ENDPOINT: &str = "https://139.162.66.20:8086";
+    const RPC_API_ENDPOINT: &str = "ws://139.162.66.20:8086";
     builder.build(RPC_API_ENDPOINT).await
 }
