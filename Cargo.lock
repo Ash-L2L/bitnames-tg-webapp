@@ -3177,7 +3177,7 @@ checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 [[package]]
 name = "plain_bitnames"
 version = "0.11.5"
-source = "git+https://github.com/LayerTwo-Labs/plain-bitnames.git?rev=9a8acbfa0cccdc764ee7f0f78869556034f3eb11#9a8acbfa0cccdc764ee7f0f78869556034f3eb11"
+source = "git+https://github.com/LayerTwo-Labs/plain-bitnames.git?rev=a3889899f019aabe70d335c7025fe4173ee85855#a3889899f019aabe70d335c7025fe4173ee85855"
 dependencies = [
  "addr",
  "anyhow",
@@ -3234,7 +3234,7 @@ dependencies = [
 [[package]]
 name = "plain_bitnames_app_rpc_api"
 version = "0.11.5"
-source = "git+https://github.com/LayerTwo-Labs/plain-bitnames.git?rev=9a8acbfa0cccdc764ee7f0f78869556034f3eb11#9a8acbfa0cccdc764ee7f0f78869556034f3eb11"
+source = "git+https://github.com/LayerTwo-Labs/plain-bitnames.git?rev=a3889899f019aabe70d335c7025fe4173ee85855#a3889899f019aabe70d335c7025fe4173ee85855"
 dependencies = [
  "bitcoin",
  "jsonrpsee",
@@ -3249,7 +3249,7 @@ dependencies = [
 [[package]]
 name = "plain_bitnames_types"
 version = "0.11.5"
-source = "git+https://github.com/LayerTwo-Labs/plain-bitnames.git?rev=9a8acbfa0cccdc764ee7f0f78869556034f3eb11#9a8acbfa0cccdc764ee7f0f78869556034f3eb11"
+source = "git+https://github.com/LayerTwo-Labs/plain-bitnames.git?rev=a3889899f019aabe70d335c7025fe4173ee85855#a3889899f019aabe70d335c7025fe4173ee85855"
 dependencies = [
  "anyhow",
  "bech32",

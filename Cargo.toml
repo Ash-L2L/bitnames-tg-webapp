@@ -19,12 +19,12 @@ serde_json = "1.0.145"
 
 [workspace.dependencies.bitnames-types]
 git = "https://github.com/LayerTwo-Labs/plain-bitnames.git"
-rev = "9a8acbfa0cccdc764ee7f0f78869556034f3eb11"
+rev = "a3889899f019aabe70d335c7025fe4173ee85855"
 package = "plain_bitnames_types"
 
 [workspace.dependencies.bitnames-rpc-api]
 git = "https://github.com/LayerTwo-Labs/plain-bitnames.git"
-rev = "9a8acbfa0cccdc764ee7f0f78869556034f3eb11"
+rev = "a3889899f019aabe70d335c7025fe4173ee85855"
 package = "plain_bitnames_app_rpc_api"
 
 [workspace.lints.clippy]
