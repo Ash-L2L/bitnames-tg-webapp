@@ -1,8 +1,4 @@
-use std::{
-    rc::Rc,
-    str::FromStr,
-    sync::{Arc, OnceLock},
-};
+use std::{rc::Rc, str::FromStr, sync::Arc};
 
 use bitnames_tg_rpc_api::RpcClient;
 use bitnames_types::{
@@ -16,12 +12,12 @@ use web_sys::console;
 use ybc::{Button, Container, Input, InputType, TextArea, Title};
 use yew::{
     Callback, Classes, Html, Properties, classes, function_component, html,
-    use_state,
+    use_memo, use_state,
 };
 
 mod tg_types;
 
-use tg_types::SecureStorage;
+use tg_types::{JsValuePartialEq, SecureStorage};
 
 fn jsvalue_of_anyhow(err: &anyhow::Error) -> JsValue {
     format!("{err:#}").into()
@@ -111,14 +107,18 @@ struct ImportXEncryptionSecretKeyState {
 // Input form component
 #[derive(Properties, PartialEq)]
 struct ImportXEncryptionSecretKeyProps {
+    pub secure_storage: Rc<JsValuePartialEq<SecureStorage>>,
     pub state: ImportXEncryptionSecretKeyState,
-    pub on_transition: Callback<XEncryptionSecretKey>,
+    pub on_xesk_stored: Callback<XEncryptionSecretKey>,
 }
+
+const XESK_STORAGE_KEY: &str = "xesk";
 
 #[function_component(ImportXEncryptionSecretKey)]
 fn import_xesk(props: &ImportXEncryptionSecretKeyProps) -> Html {
     let input_value = use_state(|| props.state.input_value.clone());
     let input_classes = use_state(|| props.state.input_classes.clone());
+    let is_storing = use_state(|| false);
 
     let on_update_input_value = {
         let input_value = input_value.clone();
@@ -126,12 +126,41 @@ fn import_xesk(props: &ImportXEncryptionSecretKeyProps) -> Html {
     };
 
     let button_onclick = {
+        let secure_storage = props.secure_storage.clone();
         let input_value = input_value.clone();
         let input_classes = input_classes.clone();
-        let on_transition = props.on_transition.clone();
+        let is_storing = is_storing.clone();
+        let on_xesk_stored = props.on_xesk_stored.clone();
         Callback::from(move |_| {
             match XEncryptionSecretKey::from_str(&input_value) {
-                Ok(xesk) => on_transition.emit(xesk),
+                Ok(xesk) => {
+                    is_storing.set(true);
+                    secure_storage.0.set_item(
+                        XESK_STORAGE_KEY,
+                        &input_value,
+                        &Closure::once({
+                            let is_storing = is_storing.clone();
+                            let on_xesk_stored = on_xesk_stored.clone();
+                            move |err, stored| {
+                                is_storing.set(false);
+                                if err == JsValue::NULL {
+                                    if stored {
+                                        on_xesk_stored.emit(xesk)
+                                    } else {
+                                        log_console_error(anyhow::anyhow!(
+                                            "Failed to store xesk"
+                                        ))
+                                    }
+                                } else {
+                                    log_console_error(anyhow::anyhow!(
+                                        "Failed to store xesk:"
+                                    ));
+                                    console::error_1(&err)
+                                }
+                            }
+                        }),
+                    );
+                }
                 Err(err) => {
                     log_console_error(err);
                     input_classes.set(classes!("highlight"));
@@ -157,15 +186,18 @@ fn import_xesk(props: &ImportXEncryptionSecretKeyProps) -> Html {
                 update={ on_update_input_value }
                 value={ (*input_value).clone() }
             />
-            <Button onclick={ button_onclick }>
-                { "Import" }
+            <Button
+                onclick={ button_onclick }
+                loading={ *is_storing }
+                disabled={ *is_storing }
+            >
+            { "Import" }
             </Button>
         </Container>
         </>
     }
 }
 
-const XESK_STORAGE_KEY: &str = "xesk";
 const XVK_STORAGE_KEY: &str = "xvk";
 
 #[derive(Debug, PartialEq, Properties)]
@@ -385,42 +417,48 @@ fn app() -> Html {
                 return Html::default();
             }
         };
-    let xesk_b58ck = Arc::new(OnceLock::<Option<String>>::new());
-    secure_storage.get_item(
-        XESK_STORAGE_KEY,
-        &Closure::once({
-            let xesk_b58ck = Arc::clone(&xesk_b58ck);
-            move |err, value: JsValue, _restorable| {
-                if err == JsValue::NULL {
-                    if value == JsValue::NULL {
-                    } else if let Some(value_str) = value.as_string() {
-                        let _: Result<(), Option<String>> =
-                            xesk_b58ck.set(Some(value_str));
-                        return;
+    let xesk_b58ck = use_state(|| None);
+    use_memo(
+        |()| {
+            let on_secure_storage_get = Closure::once({
+                let xesk_b58ck = xesk_b58ck.clone();
+                move |err, value: JsValue, _restorable| {
+                    if err == JsValue::NULL {
+                        if value == JsValue::NULL {
+                        } else if let Some(value_str) = value.as_string() {
+                            xesk_b58ck.set(Some(Some(value_str)));
+                            return;
+                        } else {
+                            log_console_error(anyhow::anyhow!(
+                                "Failed to parse stored xesk as a string"
+                            ));
+                        }
                     } else {
-                        log_console_error(anyhow::anyhow!(
-                            "Failed to parse stored xesk as a string"
-                        ));
+                        console::error_1(&err);
                     }
-                } else {
-                    console::error_1(&err);
+                    xesk_b58ck.set(Some(None));
                 }
-                let _: Result<(), Option<String>> = xesk_b58ck.set(None);
-            }
-        }),
+            });
+            secure_storage.get_item(XESK_STORAGE_KEY, &on_secure_storage_get);
+            on_secure_storage_get.forget();
+        },
+        (),
     );
-    let xesk = if let Some(xesk_b58ck) = xesk_b58ck.wait() {
-        match XEncryptionSecretKey::base58ck_decode(xesk_b58ck) {
-            Ok(xesk) => Some(xesk),
-            Err(err) => {
-                log_console_error(err);
-                return Html::default();
+    let xesk = match &*xesk_b58ck {
+        // Still loading
+        None => return Html::default(),
+        // Did not load successfully
+        Some(None) => None,
+        Some(Some(xesk_b58ck)) => {
+            match XEncryptionSecretKey::base58ck_decode(xesk_b58ck) {
+                Ok(xesk) => Some(xesk),
+                Err(err) => {
+                    log_console_error(err);
+                    return Html::default();
+                }
             }
         }
-    } else {
-        None
     };
-
     let app_state = use_state(|| match (xvk, xesk) {
         (Some(xvk), Some(xesk)) => AppState::Main(MainState {
             xesk: Rc::new(xesk),
@@ -441,38 +479,22 @@ fn app() -> Html {
             let app_state = app_state.clone();
             let xvk = *xvk;
             html! {
-                <ImportXEncryptionSecretKey state={state.clone()} on_transition={move |xesk: XEncryptionSecretKey| {
-                    let stored_ok = Arc::new(OnceLock::<bool>::new());
-                    secure_storage.set_item(
-                        XESK_STORAGE_KEY,
-                        &xesk.base58ck_encode(),
-                        &Closure::once({
-                            let stored_ok = Arc::clone(&stored_ok);
-                            move |err, stored| {
-                                if err == JsValue::NULL {
-                                    let _: Result<_, bool> = stored_ok.set(stored);
-                                } else {
-                                    console::error_1(&err);
-                                    let _: Result<_, bool> = stored_ok.set(false);
-                                }
-                            }
-                        }),
-                    );
-                    if !stored_ok.wait() {
-                        log_console_error(anyhow::anyhow!("Failed to store xesk"));
-                        return
+                <ImportXEncryptionSecretKey
+                    secure_storage={ Rc::new(JsValuePartialEq(secure_storage)) }
+                    state={state.clone()}
+                    on_xesk_stored={move |xesk: XEncryptionSecretKey| {
+                        match xvk.as_ref() {
+                            Some(xvk) => app_state.set(AppState::Main(MainState {
+                                xesk: Rc::new(xesk),
+                                xvk: *xvk,
+                            })),
+                            None => app_state.set(AppState::ImportXVerifyingKey {
+                                state: ImportXVerifyingKeyState::default(),
+                                xesk: Some(xesk),
+                            })
+                        }
                     }
-                    match xvk.as_ref() {
-                        Some(xvk) => app_state.set(AppState::Main(MainState {
-                            xesk: Rc::new(xesk),
-                            xvk: *xvk,
-                        })),
-                        None => app_state.set(AppState::ImportXVerifyingKey {
-                            state: ImportXVerifyingKeyState::default(),
-                            xesk: Some(xesk),
-                        })
-                    }
-                }}/>
+                }/>
             }
         }
         AppState::ImportXVerifyingKey { state, xesk } => {

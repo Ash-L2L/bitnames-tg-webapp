@@ -24,6 +24,16 @@ unsafe extern "C" {
 
     /// In case of an error, the first argument will contain the error.
     /// In case of success, the first argument will be null and the second
+    /// argument will be a boolean indicating whether the value was removed.
+    #[wasm_bindgen(js_class = "Object", js_name = "removeItem", method)]
+    pub fn remove_item(
+        this: &SecureStorage,
+        key: &str,
+        callback: &Closure<dyn FnMut(JsValue, bool)>,
+    ) -> SecureStorage;
+
+    /// In case of an error, the first argument will contain the error.
+    /// In case of success, the first argument will be null and the second
     /// argument will be a boolean indicating whether the value was stored.
     #[wasm_bindgen(js_class = "Object", js_name = "setItem", method)]
     pub fn set_item(
@@ -32,4 +42,19 @@ unsafe extern "C" {
         value: &str,
         callback: &Closure<dyn FnMut(JsValue, bool)>,
     ) -> SecureStorage;
+}
+
+/// Wrapper to impl PartialEq via `AsRef<JsValue>`.
+#[repr(transparent)]
+pub struct JsValuePartialEq<T>(pub T);
+
+impl<T> PartialEq for JsValuePartialEq<T>
+where
+    T: AsRef<JsValue>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        let self_jsvalue: &JsValue = self.0.as_ref();
+        let other_jsvalue: &JsValue = other.0.as_ref();
+        self_jsvalue.eq(other_jsvalue)
+    }
 }
