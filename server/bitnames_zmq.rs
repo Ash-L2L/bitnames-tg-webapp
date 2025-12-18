@@ -9,7 +9,7 @@ use teloxide::{
     Bot,
     prelude::{Request, Requester},
     requests::HasPayload,
-    types::ChatId,
+    types::Recipient,
 };
 use tokio::sync::RwLock;
 
@@ -41,54 +41,70 @@ impl Context {
     }
 
     async fn handle_tx(&self, tx: &Transaction) -> anyhow::Result<()> {
+        async fn send_notification(
+            memo: &[u8],
+            recipients: &HashSet<Recipient>,
+            telegram_bot: &Bot,
+        ) -> anyhow::Result<()> {
+            let web_app_url: url::Url = url::Url::parse(&format!(
+                "https://bitnames-tg.xyz:8085/decrypt/{}",
+                hex::encode(memo),
+            ))?;
+            let web_app_info = teloxide::types::WebAppInfo { url: web_app_url };
+            let inline_kb_button = teloxide::types::InlineKeyboardButton {
+                text: "Decrypt".to_owned(),
+                kind: teloxide::types::InlineKeyboardButtonKind::WebApp(
+                    web_app_info,
+                ),
+            };
+            let inline_kb_markup =
+                teloxide::types::InlineKeyboardMarkup::new([[
+                    inline_kb_button,
+                ]]);
+            let reply_markup =
+                Some(teloxide::types::ReplyMarkup::from(inline_kb_markup));
+            // FIXME: make this concurrent
+            for recipient in recipients.iter().cloned() {
+                let mut req = telegram_bot.send_message(
+                    recipient,
+                    "You may have received paymail!\n
+                        Click/Tap to try to decrypt.",
+                );
+                req.payload_mut().reply_markup = reply_markup.clone();
+                let _resp_message: teloxide::types::Message =
+                    req.send().await?;
+            }
+            Ok(())
+        }
+
         let shared_ctxt = self.shared.read().await;
         for output in &tx.outputs {
-            if !tx.memo.is_empty() {
-                let chat_ids: HashSet<ChatId> = shared_ctxt
-                    .chat_ids(&output.address)
+            if !tx.memo.is_empty() || !output.memo.is_empty() {
+                let recipients: HashSet<Recipient> = shared_ctxt
+                    .recipients(&output.address)
                     .into_iter()
-                    .flat_map(|chat_ids| chat_ids.iter())
-                    .copied()
+                    .flatten()
+                    .cloned()
                     .collect();
-                let web_app_url: url::Url = url::Url::parse(&format!(
-                    "https://bitnames-tg.xyz:8085/decrypt/{}",
-                    hex::encode(&tx.memo),
-                ))?;
-                let web_app_info =
-                    teloxide::types::WebAppInfo { url: web_app_url };
-                let inline_kb_button = teloxide::types::InlineKeyboardButton {
-                    text: "Decrypt".to_owned(),
-                    kind: teloxide::types::InlineKeyboardButtonKind::WebApp(
-                        web_app_info,
-                    ),
-                };
-                let inline_kb_markup =
-                    teloxide::types::InlineKeyboardMarkup::new([[
-                        inline_kb_button,
-                    ]]);
-                let reply_markup =
-                    Some(teloxide::types::ReplyMarkup::from(inline_kb_markup));
-                // FIXME: make this concurrent
-                for chat_id in chat_ids {
-                    let mut req = self.tg_bot.send_message(
-                        teloxide::types::Recipient::Id(chat_id),
-                        "You may have received paymail!\n
-                            Click/Tap to try to decrypt.",
-                    );
-                    req.payload_mut().reply_markup = reply_markup.clone();
-                    let _resp_message: teloxide::types::Message =
-                        req.send().await?;
+                if !tx.memo.is_empty() {
+                    let () =
+                        send_notification(&tx.memo, &recipients, &self.tg_bot)
+                            .await?;
+                }
+                if !output.memo.is_empty() {
+                    let () = send_notification(
+                        &output.memo,
+                        &recipients,
+                        &self.tg_bot,
+                    )
+                    .await?;
                 }
             }
         }
         Ok(())
     }
 
-    async fn handle_new_txs(
-        &mut self,
-        txs: &[Transaction],
-    ) -> anyhow::Result<()> {
-        // FIXME
+    async fn handle_new_txs(&self, txs: &[Transaction]) -> anyhow::Result<()> {
         for tx in txs {
             self.handle_tx(tx).await?;
         }

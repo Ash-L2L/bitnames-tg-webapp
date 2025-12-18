@@ -34,7 +34,7 @@ async fn answer(
 ) -> ResponseResult<()> {
     match cmd {
         Command::Addresses => {
-            let resp = match ctxt.read().await.addrs(&msg.chat.id) {
+            let resp = match ctxt.read().await.addrs(&msg.chat.id.into()) {
                 Some(addrs) => {
                     use std::fmt::Write;
                     let mut s = "Found addresses: \n".to_owned();
@@ -57,7 +57,10 @@ async fn answer(
                 .await?
         }
         Command::RegisterAddress(address) => {
-            let resp = if ctxt.write().await.register_addr(msg.chat.id, address)
+            let resp = if ctxt
+                .write()
+                .await
+                .register_addr(msg.chat.id.into(), address)
             {
                 format!("Registered address {address} successfully")
             } else {
@@ -66,12 +69,15 @@ async fn answer(
             bot.send_message(msg.chat.id, resp).await?
         }
         Command::UnregisterAddress(address) => {
-            let resp =
-                if ctxt.write().await.unregister_addr(msg.chat.id, address) {
-                    format!("Unregistered address {address} successfully")
-                } else {
-                    format!("Address {address} was not registered")
-                };
+            let resp = if ctxt
+                .write()
+                .await
+                .unregister_addr(msg.chat.id.into(), address)
+            {
+                format!("Unregistered address {address} successfully")
+            } else {
+                format!("Address {address} was not registered")
+            };
             bot.send_message(msg.chat.id, resp).await?
         }
     };

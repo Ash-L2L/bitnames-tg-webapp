@@ -58,15 +58,23 @@ async fn main() -> anyhow::Result<()> {
         WARP_SERVER_SOCKET_ADDR,
         CERT_PATH,
         KEY_PATH,
+        tg_bot.token(),
+        ctxt.clone(),
         dbs.clone(),
     ));
     let _zmq_task_abort = tasks
         .spawn(async move { bitnames_zmq::start(tg_bot, ctxt, dbs).await });
 
-    let err_msg = tasks
-        .join_next()
-        .await
-        .expect("empty task set")
-        .expect_err("task completed without error message");
-    anyhow::bail!("task failed with error message {err_msg}")
+    match tasks.join_next().await.expect("empty task set") {
+        Ok(Ok(())) => anyhow::bail!("task completed without error message"),
+        Ok(Err(err)) => {
+            let err: anyhow::Error = err;
+            anyhow::bail!("task failed with error: {err:#}")
+        }
+        Err(err) => {
+            let err: tokio::task::JoinError = err;
+            let err = anyhow::Error::from(err);
+            anyhow::bail!("task failed with error: {err:#}")
+        }
+    }
 }

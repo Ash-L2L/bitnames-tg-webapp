@@ -10,6 +10,7 @@ version.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async_zmq = "0.3.3"
+bitcoin_hashes = { workspace = true }
 bitnames-rpc-api = { workspace = true }
 bitnames-tg-rpc-api = { path = "../rpc-api" }
 bitnames-types = { workspace = true }
@@ -20,7 +21,9 @@ jsonrpsee = { workspace = true, features = ["http-client"] }
 heed = "0.21.0"
 hex = "0.4.3"
 reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls"] }
-serde_json = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+serde_qs = "0.15.0"
 sneed = { version = "0.0.11", features = ["observe"] }
 tokio = { version = "1.28.1", features = ["full"] }
 tracing = "0.1.37"

@@ -48,3 +48,9 @@ button span {
 .input::placeholder {
     color: $blue;
 }
+
+.textarea {
+    background-color: $purple-light;
+    border-color: $blue;
+    color: $blue-light;
+}

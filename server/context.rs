@@ -1,14 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use bitnames_types::Address;
-use teloxide::types::ChatId;
+use teloxide::types::Recipient;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
-    // map associating several chat IDs to each address
-    addr_to_chatids: HashMap<Address, HashSet<ChatId>>,
-    // map associating several addresses to each chat ID
-    chatid_to_addrs: HashMap<ChatId, HashSet<Address>>,
+    // map associating several recipients to each address
+    addr_to_recipients: HashMap<Address, HashSet<Recipient>>,
+    // map associating several addresses to each recipient
+    recipient_to_addrs: HashMap<Recipient, HashSet<Address>>,
 }
 
 impl Context {
@@ -17,39 +17,47 @@ impl Context {
     }
 
     /// returns a bool indicating whether the value was newly inserted
-    pub fn register_addr(&mut self, chat_id: ChatId, addr: Address) -> bool {
+    pub fn register_addr(
+        &mut self,
+        recipient: Recipient,
+        addr: Address,
+    ) -> bool {
         let _ = self
-            .addr_to_chatids
+            .addr_to_recipients
             .entry(addr)
             .or_default()
-            .insert(chat_id);
-        self.chatid_to_addrs
-            .entry(chat_id)
+            .insert(recipient.clone());
+        self.recipient_to_addrs
+            .entry(recipient)
             .or_default()
             .insert(addr)
     }
 
     /// returns a bool indicating whether the address was previously registered
-    pub fn unregister_addr(&mut self, chat_id: ChatId, addr: Address) -> bool {
-        if let Some(chat_ids) = self.addr_to_chatids.get_mut(&addr) {
-            let _ = chat_ids.remove(&chat_id);
+    pub fn unregister_addr(
+        &mut self,
+        recipient: Recipient,
+        addr: Address,
+    ) -> bool {
+        if let Some(recipients) = self.addr_to_recipients.get_mut(&addr) {
+            let _ = recipients.remove(&recipient);
         };
-        match self.chatid_to_addrs.get_mut(&chat_id) {
+        match self.recipient_to_addrs.get_mut(&recipient) {
             Some(addrs) => addrs.remove(&addr),
             None => false,
         }
     }
 
-    /// returns a set of all addresses associated with a chat ID
-    pub fn addrs(&self, chat_id: &ChatId) -> Option<&HashSet<Address>> {
-        self.chatid_to_addrs.get(chat_id)
+    /// returns a set of all addresses associated with a recipient
+    pub fn addrs(&self, recipient: &Recipient) -> Option<&HashSet<Address>> {
+        self.recipient_to_addrs.get(recipient)
     }
 
-    /// returns a set of all chat IDs associated with an address
-    pub fn chat_ids<'a>(
+    /// returns a set of all recipients associated with an address
+    pub fn recipients<'a>(
         &'a self,
         addr: &Address,
-    ) -> Option<&'a HashSet<ChatId>> {
-        self.addr_to_chatids.get(addr)
+    ) -> Option<&'a HashSet<Recipient>> {
+        self.addr_to_recipients.get(addr)
     }
 }

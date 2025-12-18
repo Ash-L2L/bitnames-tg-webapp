@@ -273,7 +273,10 @@ fn main_page(props: &MainState) -> Html {
             .await
             .map_err(|err| Arc::new(anyhow::Error::from(err)))?;
             rpc_client
-                .check_for_used_addresses(telegram_webapp_initdata, Vec::new())
+                .check_for_used_addresses(
+                    telegram_webapp_initdata,
+                    address_batch,
+                )
                 .map_err(|err| Arc::new(anyhow::Error::from(err)))
                 .await
         },

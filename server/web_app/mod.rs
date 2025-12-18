@@ -1,5 +1,6 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
+use tokio::sync::RwLock;
 use warp::{
     self, Filter,
     reject::Rejection,
@@ -7,7 +8,7 @@ use warp::{
     trace,
 };
 
-use crate::dbs::Dbs;
+use crate::{context::Context, dbs::Dbs};
 
 mod rpc_server;
 
@@ -70,13 +71,15 @@ fn sign_in() -> impl Filter<Extract = impl Reply, Error = Rejection>
         .with(trace::named("sign-in"))
 }
 
-pub async fn warp_server(
+pub fn warp_server(
     socket_addr: SocketAddr,
     cert_path: &str,
     key_path: &str,
+    bot_token: &str,
+    ctxt: Arc<RwLock<Context>>,
     dbs: Dbs,
-) -> anyhow::Result<()> {
-    let json_rpc_server = rpc_server::RpcServerImpl::new(dbs);
+) -> impl Future<Output = anyhow::Result<()>> + use<> {
+    let json_rpc_server = rpc_server::RpcServerImpl::new(bot_token, ctxt, dbs);
     let dist_route = warp::path("dist").and(warp::fs::dir("dist"));
     let jsonrpc_ws_route = warp::path("jsonrpc")
         .and(warp::filters::ws::ws())
@@ -141,11 +144,13 @@ pub async fn warp_server(
         //.or(sign_in())
         .or(dist_route)
         .with(trace::request());
-    warp::serve(routes)
+    let fut = warp::serve(routes)
         .tls()
         .cert_path(cert_path)
         .key_path(key_path)
-        .run(socket_addr)
-        .await;
-    Ok(())
+        .run(socket_addr);
+    async {
+        fut.await;
+        Ok(())
+    }
 }
